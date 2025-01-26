@@ -10,6 +10,7 @@
 #include <random>
 #include <sstream>
 #include <numeric>
+#include "functions.h"
 
 const double M_PI = 3.14159265358979323846;
 const double G = 6.67430e-11;
@@ -64,114 +65,15 @@ double massa_halo;
 double scale_halo;
 double shag_dt = 0.0001;
 double dt_out = 10000;
-struct QuadtreeNode
-{
-    double x, y;
-    double width, height;
-    std::vector<Particle*> particles;
-    std::unique_ptr<QuadtreeNode> nw, ne, sw, se;
-
-    // Конструктор узла
-    QuadtreeNode(double x, double y, double width, double height)
-        : x(x), y(y), width(width), height(height) {
-    }
-
-    // Проверка, находится ли частица в пределах узла
-    bool contains(Particle* particle) {
-        return particle->x >= x - width / 2 && particle->x < x + width / 2 &&
-            particle->y >= y - height / 2 && particle->y < y + height / 2;
-    }
-
-    // Разделить узел на 4 дочерних
-    void subdivide() {
-        double halfWidth = width / 2.0;
-        double halfHeight = height / 2.0;
-
-        nw = std::make_unique<QuadtreeNode>(x - halfWidth / 2, y - halfHeight / 2, halfWidth, halfHeight);
-        ne = std::make_unique<QuadtreeNode>(x + halfWidth / 2, y - halfHeight / 2, halfWidth, halfHeight);
-        sw = std::make_unique<QuadtreeNode>(x - halfWidth / 2, y + halfHeight / 2, halfWidth, halfHeight);
-        se = std::make_unique<QuadtreeNode>(x + halfWidth / 2, y + halfHeight / 2, halfWidth, halfHeight);
-    }
-
-    // Вставить частицу в дерево
-    bool insert(Particle* particle) {
-        // Если частица не принадлежит текущему узлу
-        if (!contains(particle)) return false;
-
-        // Если узел имеет меньше чем 4 частицы, вставляем прямо сюда
-        if (particles.size() < 4) {
-            particles.push_back(particle);
-            return true;
-        }
-
-        // Если узел уже содержит 4 частицы, делим его
-        if (!nw) subdivide();
-
-        // Пытаемся вставить частицу в одном из дочерних узлов
-        if (nw->insert(particle)) return true;
-        if (ne->insert(particle)) return true;
-        if (sw->insert(particle)) return true;
-        if (se->insert(particle)) return true;
-
-        return false; // Если не удалось вставить
-    }
-
-    // Найти соседей для частицы в пределах радиуса сглаживания
-    void findNeighbors(Particle& particle, double smoothingLength, std::vector<Particle*>& neighbors) {
-        // Если текущий узел не пересекается с радиусом сглаживания, то нет смысла проверять его
-        double r = smoothingLength;
-        if (std::abs(particle.x - x) > width / 2 + r || std::abs(particle.y - y) > height / 2 + r) {
-            return;
-        }
-
-        // Добавляем частицы из текущего узла
-        for (Particle* p : particles) {
-            double dx = p->x - particle.x;
-            double dy = p->y - particle.y;
-            double distance = std::sqrt(dx * dx + dy * dy);
-            if (distance <= smoothingLength) {
-                neighbors.push_back(p);
-            }
-        }
-
-        // Рекурсивно ищем соседей в дочерних узлах
-        if (nw) nw->findNeighbors(particle, smoothingLength, neighbors);
-        if (ne) ne->findNeighbors(particle, smoothingLength, neighbors);
-        if (sw) sw->findNeighbors(particle, smoothingLength, neighbors);
-        if (se) se->findNeighbors(particle, smoothingLength, neighbors);
-    }
-};
-
-
-// Главная структура дерева, которая управляет корнем и частицами
-class Quadtree {
-public:
-    std::unique_ptr<QuadtreeNode> root;
-
-    Quadtree(double x, double y, double width, double height) {
-        root = std::make_unique<QuadtreeNode>(x, y, width, height);
-    }
-
-    // Вставка частицы в дерево
-    void insert(Particle* particle) {
-        root->insert(particle);
-    }
-
-    // Поиск соседей для частицы
-    void findNeighbors(Particle& particle, double smoothingLength, std::vector<Particle*>& neighbors) {
-        root->findNeighbors(particle, smoothingLength, neighbors);
-    }
-};
 
 class Grid
 {
 public:
     double cellSize;
     int gridSizeX, gridSizeY;
-    double a, b; // Границы области
-    std::vector<std::vector<std::vector<Particle*>>> cells; // Массив указателей на частицы
+    double a, b;
+    std::vector<std::vector<std::vector<Particle*>>> cells;
 
-    // Конструктор с дополнительными параметрами для границ области
     Grid(double maxSmoothingLength, const std::vector<Particle>& particles, double minX, double maxX)
         : a(minX), b(maxX)
     {
@@ -190,16 +92,13 @@ public:
         {
             if (particle.x >= a && particle.x <= b && particle.y >= a && particle.y <= b)
             {
-                // Проверяем попадание координат в ячейку сетки
                 int cellX = static_cast<int>((particle.x - a) / cellSize);
                 int cellY = static_cast<int>((particle.y - a) / cellSize);
 
-                // Корректируем индексы, если они выходят за границы
                 cellX = min(max(cellX, 0), gridSizeX - 1);
                 cellY = min(max(cellY, 0), gridSizeY - 1);
 
-                // Добавляем указатель на частицу
-                cells[cellX][cellY].push_back(const_cast<Particle*>(&particle)); // Преобразуем const ссылку в указатель
+                cells[cellX][cellY].push_back(const_cast<Particle*>(&particle));
             }
         }
     }
@@ -701,26 +600,6 @@ void initializeGasCloud() {
 
 
 
-double computeKsiForHalo(double x, double y, double z)
-{
-    return sqrt((x / a_halo) * (x / a_halo) + (y / b_halo) * (y / b_halo) + (z / c_halo) * (z / c_halo));
-}
-
-double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ)
-{
-    return -A * (1.0 / ksi - 1.0 / (ksi * ksi) * atan(ksi)) * (koord / (ksi * halo_OXYZ));
-}
-
-double computeForcePressure(double p, double density_disk, double r, double scale_radius)
-{
-    return -gamma * p / density_disk * pow(density_disk, gamma - 2.0) * (-2.0 * sinh(r / scale_radius) / scale_radius);
-}
-
-double computeRho(double dist, double rad)
-{
-    double rho = (1.0 / (cosh(dist / rad) * cosh(dist / rad)));
-    return rho;
-}
 
 double dW(double r_ij, double h, double r)
 {
