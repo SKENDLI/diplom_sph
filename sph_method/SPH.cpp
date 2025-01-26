@@ -1,5 +1,4 @@
 ﻿#include "calculate_functions.h"
-#include "grid.h"
 #include "initial_conditions.h"
 #include "in_out_data_functions.h"
 

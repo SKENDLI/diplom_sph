@@ -1,6 +1,6 @@
 #pragma once
 #include "globals.h"
-
+#include "grid.h"
 double computeKsiForHalo(double x, double y, double z)
 {
     return sqrt((x / a_halo) * (x / a_halo) + (y / b_halo) * (y / b_halo) + (z / c_halo) * (z / c_halo));
