@@ -1,4 +1,5 @@
 ﻿#include "calculate_functions.h"
+#include "grid.h"
 
 double dW(double r_ij, double h, double r);
 void saveParticlesToFile(double times, double Dt);
