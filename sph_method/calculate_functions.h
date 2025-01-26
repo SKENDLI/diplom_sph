@@ -1,3 +1,4 @@
+#pragma once
 #include "globals.h"
 
 double computeKsiForHalo(double x, double y, double z)
