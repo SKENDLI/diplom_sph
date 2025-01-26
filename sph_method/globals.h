@@ -64,3 +64,18 @@ std::vector <double> sum_velocity_y;
 std::vector <double> sum_smoothingLength;
 std::vector <double> force_halo_x;
 std::vector <double> force_halo_y;
+
+double dW(double r_ij, double h, double r);
+void saveParticlesToFile(double times, double Dt);
+void initializeGasCloud();
+double Viscosity(double x_i, double y_i, double x_j, double y_j, double velocity_ij_x, double velocity_ij_y, double h_ij, double rho_i, double rho_j, double pressure_i, double pressure_j, double r_ij);
+double SoundSpeed(double p_i, double rho_i);
+void Predictor();
+void Korrector();
+void SPH();
+void dt();
+int configuration();
+double computeKsiForHalo(double x, double y, double z);
+double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ);
+double computeForcePressure(double p, double density_disk, double r, double scale_radius);
+double computeRho(double dist, double rad);
