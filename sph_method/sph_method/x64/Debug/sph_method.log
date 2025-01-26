@@ -1,4 +1,0 @@
-﻿  SPH.cpp
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.42.34433\include\filesystem(12): warning STL4038: The contents of <filesystem> are available only with C++17 or later.
-C:\Users\SKENDLI\Desktop\diplom\diplom_sph\sph_method\SPH.cpp(830,18): warning C4267: инициализация: преобразование из "size_t" в "int"; возможна потеря данных
-  sph_method.vcxproj -> C:\Users\SKENDLI\Desktop\diplom\diplom_sph\sph_method\x64\Debug\sph_method.exe
