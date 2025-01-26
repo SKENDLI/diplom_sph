@@ -1,4 +1,4 @@
-﻿#include "functions.h"
+﻿#include "calculate_functions.h"
 
 double dW(double r_ij, double h, double r);
 void saveParticlesToFile(double times, double Dt);

@@ -1,8 +1,5 @@
 #include "globals.h"
 
-const double M_PI = 3.14159265358979323846;
-const double G = 6.67430e-11;
-
 class Grid
 {
 public:
