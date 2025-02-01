@@ -75,11 +75,16 @@ void SPH()
                 double ksi = computeKsiForHalo(particles[i].x, particles[i].y, 0.0);
                 double force_halo_x = computeForceGrav(ksi, particles[i].x, A, 1.0);
                 double force_halo_y = computeForceGrav(ksi, particles[i].y, A, 1.0);
+
+                // Обновляем скорость и положение (предиктор)
                 predictedParticles[i].velocityX = particles[i].velocityX + (sum_velocity_x[i] + force_halo_x) * 0.5 * tau;
                 predictedParticles[i].velocityY = particles[i].velocityY + (sum_velocity_y[i] + force_halo_y) * 0.5 * tau;
                 predictedParticles[i].x = particles[i].x + predictedParticles[i].velocityX * 0.5 * tau;
                 predictedParticles[i].y = particles[i].y + predictedParticles[i].velocityY * 0.5 * tau;
-                predictedParticles[i].distanceFromCenter = sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
+
+                // Исправлено: вычисляем расстояние от центра по новым координатам
+                predictedParticles[i].distanceFromCenter = sqrt(predictedParticles[i].x * predictedParticles[i].x + predictedParticles[i].y * predictedParticles[i].y);
+
                 if (predictedParticles[i].distanceFromCenter < radius)
                 {
                     predictedParticles[i].mass = particles[i].mass;
@@ -90,7 +95,9 @@ void SPH()
                 }
             }
         }
+
         Korrector();
+
         for (int i = 0; i < numParticles; ++i)
         {
             if (predictedParticles[i].mass > 0)
@@ -99,11 +106,14 @@ void SPH()
                 double ksi = computeKsiForHalo(predictedParticles[i].x, predictedParticles[i].y, 0.0);
                 double force_halo_x = computeForceGrav(ksi, predictedParticles[i].x, A, 1.0);
                 double force_halo_y = computeForceGrav(ksi, predictedParticles[i].y, A, 1.0);
+
+                // Обновляем скорость и положение (корректор)
                 particles[i].velocityX = predictedParticles[i].velocityX + (sum_velocity_x[i] + force_halo_x) * 0.5 * tau;
                 particles[i].velocityY = predictedParticles[i].velocityY + (sum_velocity_y[i] + force_halo_y) * 0.5 * tau;
                 particles[i].x = predictedParticles[i].x + particles[i].velocityX * 0.5 * tau;
                 particles[i].y = predictedParticles[i].y + particles[i].velocityY * 0.5 * tau;
                 particles[i].distanceFromCenter = sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
+
                 if (particles[i].distanceFromCenter < radius)
                 {
                     particles[i].density = predictedParticles[i].density + sum_rho[i] * 0.5 * tau;
@@ -126,7 +136,7 @@ void SPH()
             {
                 saveParticlesToFile(t, Dt);
             }
-            //std::cout << t << " DT: " << Dt << std::endl;
+            std::cout << t << " DT: " << Dt << std::endl;
             Dt += shag_dt;
         }
     }

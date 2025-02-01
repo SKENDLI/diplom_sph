@@ -18,9 +18,10 @@ double computeForcePressure(double p, double density_disk, double r, double scal
 
 double computeRho(double dist, double rad)
 {
-    double rho = (1.0 / (cosh(dist / rad) * cosh(dist / rad)));
-    return rho;
+    double cosh_val = cosh(dist / rad);
+    return 1.0 / (cosh_val * cosh_val);
 }
+
 
 void Predictor()
 {

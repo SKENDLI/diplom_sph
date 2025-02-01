@@ -1,7 +1,7 @@
 ﻿#pragma once
 void initializeGasCloud() {
     particles.resize(numParticles);
-
+    double v_rot;
     double particleMass = system_Mass / numParticles;
     double scale_radius = radius / scale;
     int numRings = 100;
@@ -35,6 +35,19 @@ void initializeGasCloud() {
             double y = r * sin(phi);
             double distance = sqrt(x * x + y * y);
 
+            // Вычисляем плотность и давление
+            double density = computeRho(distance, scale_radius) * density0;
+            double pressure_local = pressure * pow(density, gamma);
+
+            double dRho_dr = -2.0 * sinh(distance / scale_radius) / (scale_radius * pow(cosh(distance / scale_radius), 3));
+            // Градиент давления
+            double dP_dr = gamma * pressure * pow(density, gamma - 2.0) * dRho_dr;
+
+            // Сила давления
+            double force_pressure_x = -dP_dr * (x / distance);
+            double force_pressure_y = -dP_dr * (y / distance);
+
+            // Гравитационные силы
             double ksi = computeKsiForHalo(x, y, 0.0);
             double force_halo_x = computeForceGrav(ksi, x, A, a_halo);
             double force_halo_y = computeForceGrav(ksi, y, A, b_halo);
@@ -42,17 +55,19 @@ void initializeGasCloud() {
             double force_gravity_x = force_halo_x;
             double force_gravity_y = force_halo_y;
 
-            double density_disk = computeRho(distance, scale_radius);
-            double density = density_disk * density0;
-            double pressure_local = pressure * pow(density, gamma);
+            // Общая сила (гравитация + давление)
+            double F_r = (force_gravity_x * x + force_gravity_y * y) / distance;
+            double Fuv_r = (force_pressure_x * x + force_pressure_y * y) / distance;
 
-            double dP_dr = -gamma * pressure * pow(density, gamma - 1.0) * (density / distance);
-            double force_pressure_x = dP_dr * (x / distance);
-            double force_pressure_y = dP_dr * (y / distance);
+            // Расчет скорости вращения
+            v_rot = sqrt(distance * (F_r + Fuv_r));
 
-            double force_total_x = force_gravity_x + force_pressure_x;
-            double force_total_y = force_gravity_y + force_pressure_y;
+            // Угол для вычисления компонент скорости
+            double ff = atan2(y, x);
+            particles[particleIndex].velocityX = -v_rot * sin(ff);
+            particles[particleIndex].velocityY = v_rot * cos(ff);
 
+            // Заполнение данных частицы
             particles[particleIndex].x = x;
             particles[particleIndex].y = y;
             particles[particleIndex].distanceFromCenter = distance;
@@ -60,53 +75,54 @@ void initializeGasCloud() {
             particles[particleIndex].mass = particleMass;
             particles[particleIndex].smoothingLength = sqrt(particleMass / density);
             particles[particleIndex].pressure = pressure_local;
-            particles[particleIndex].energy = (pressure * pow(density, gamma - 1.0)) / (gamma - 1.0);
-
-            // Расчет скорости вращения
-            double v_rot = sqrt(distance * sqrt(force_total_x * force_total_x + force_total_y * force_total_y));
-            double ff = atan2(y, x);
-
-            // Составление компонент скорости
-            particles[particleIndex].velocityX = -v_rot * sin(ff);
-            particles[particleIndex].velocityY = v_rot * cos(ff);
+            particles[particleIndex].energy = (pressure_local * pow(density, gamma - 1.0)) / (gamma - 1.0);
 
             ++particleIndex;
         }
     }
-
-    // Заполнение оставшихся частиц равномерно в центре
-    double r_center = 0.1 * radius; // Радиус области для равномерного распределения
+    // Заполнение оставшихся частиц в центре
+    double r_center = 0.1 * radius; // Радиус центральной области
     while (particleIndex < numParticles) {
-        double r = sqrt(dis(gen)) * r_center; // Радиус равномерно по площади
+        // Распределение частиц в пределах малого радиуса
+        double r = sqrt(dis(gen)) * r_center;
         double phi = 2.0 * M_PI * dis(gen);
         double x = r * cos(phi);
         double y = r * sin(phi);
         double distance = sqrt(x * x + y * y);
 
-        // Вычисление плотности и давления для частиц в центре
-        double density_disk = computeRho(distance, scale_radius);
-        double density = density_disk * density0;
+        // Вычисляем плотность и давление
+        double density = computeRho(distance, scale_radius) * density0;
         double pressure_local = pressure * pow(density, gamma);
 
-        // Расчет градиента давления
-        double dP_dr = -gamma * pressure * pow(density, gamma - 1.0) * (density / distance);
-        double force_pressure_x = dP_dr * (x / distance);
-        double force_pressure_y = dP_dr * (y / distance);
+        double dRho_dr = -2.0 * sinh(distance / scale_radius) / (scale_radius * pow(cosh(distance / scale_radius), 3));
+        // Градиент давления
+        double dP_dr = gamma * pressure * pow(density, gamma - 2.0) * dRho_dr;
 
-        // Вычисление гравитационных сил
-        double ksi = computeKsiForHalo(x, y, 0.0); // z = 0, если 2D модель
-        double force_halo_x = computeForceGrav(ksi, x, A, a_halo); // Учитываем ξ при вычислении силы
-        double force_halo_y = computeForceGrav(ksi, y, A, b_halo); // Учитываем ξ при вычислении силы
+        // Сила давления
+        double force_pressure_x = -dP_dr * (x / distance);
+        double force_pressure_y = -dP_dr * (y / distance);
 
-        // Итоговая гравитационная сила
+        // Гравитационные силы
+        double ksi = computeKsiForHalo(x, y, 0.0);
+        double force_halo_x = computeForceGrav(ksi, x, A, a_halo);
+        double force_halo_y = computeForceGrav(ksi, y, A, b_halo);
+
         double force_gravity_x = force_halo_x;
         double force_gravity_y = force_halo_y;
 
-        // Общая сила
-        double force_total_x = force_gravity_x + force_pressure_x;
-        double force_total_y = force_gravity_y + force_pressure_y;
+        // Общая сила (гравитация + давление)
+        double F_r = (force_gravity_x * x + force_gravity_y * y) / distance;
+        double Fuv_r = (force_pressure_x * x + force_pressure_y * y) / distance;
 
-        // Заполнение параметров частицы
+        // Расчет скорости вращения
+        v_rot = sqrt(distance * (F_r + Fuv_r));
+
+        // Угол для вычисления компонент скорости
+        double ff = atan2(y, x);
+        particles[particleIndex].velocityX = -v_rot * sin(ff);
+        particles[particleIndex].velocityY = v_rot * cos(ff);
+
+        // Заполнение данных частицы
         particles[particleIndex].x = x;
         particles[particleIndex].y = y;
         particles[particleIndex].distanceFromCenter = distance;
@@ -114,15 +130,7 @@ void initializeGasCloud() {
         particles[particleIndex].mass = particleMass;
         particles[particleIndex].smoothingLength = sqrt(particleMass / density);
         particles[particleIndex].pressure = pressure_local;
-        particles[particleIndex].energy = pressure_local / (density * (gamma - 1.0));
-
-        // Расчет скорости вращения
-        double v_rot = sqrt(distance * sqrt(force_total_x * force_total_x + force_total_y * force_total_y));
-        double ff = atan2(y, x);
-
-        // Составление компонент скорости
-        particles[particleIndex].velocityX = -v_rot * sin(ff);
-        particles[particleIndex].velocityY = v_rot * cos(ff);
+        particles[particleIndex].energy = (pressure_local * pow(density, gamma - 1.0)) / (gamma - 1.0);
 
         ++particleIndex;
     }
