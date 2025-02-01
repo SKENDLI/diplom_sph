@@ -60,7 +60,7 @@ void initializeGasCloud() {
             particles[particleIndex].mass = particleMass;
             particles[particleIndex].smoothingLength = sqrt(particleMass / density);
             particles[particleIndex].pressure = pressure_local;
-            particles[particleIndex].energy = pressure_local / (density * (gamma - 1.0));// p_0*rho^(y-1)/(y-1)
+            particles[particleIndex].energy = (pressure * pow(density, gamma - 1.0)) / (gamma - 1.0);
 
             // Расчет скорости вращения
             double v_rot = sqrt(distance * sqrt(force_total_x * force_total_x + force_total_y * force_total_y));
