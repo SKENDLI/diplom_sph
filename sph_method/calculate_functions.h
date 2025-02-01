@@ -295,3 +295,41 @@ void dt()
         tau = min(tau, dt);
     }
 }
+
+double computeTotalEnergy(const std::vector<Particle>& particles, double G) {
+    double totalEnergy = 0.0;
+
+    for (int i = 0; i < particles.size(); ++i) {
+        Particle pi = particles[i];
+        // Кинетическая энергия
+        double kineticEnergy = 0.5 * pi.mass * (pi.velocityX * pi.velocityX + pi.velocityY * pi.velocityY);
+
+        // Внутренняя энергия
+        double internalEnergy = pi.energy * pi.mass;
+
+        // Потенциальная энергия (гравитационная)
+        double potentialEnergy = 0.0;
+        for (int j = 0; j < particles.size(); ++j) {
+            if (i == j) continue;
+            Particle pj = particles[j];
+            double dx = pi.x - pj.x;
+            double dy = pi.y - pj.y;
+            double distance = sqrt(dx * dx + dy * dy);
+            potentialEnergy -= G * pi.mass * pj.mass / distance;
+        }
+
+        // Суммируем все виды энергии
+        totalEnergy += kineticEnergy + internalEnergy + potentialEnergy;
+    }
+
+    return totalEnergy;
+}
+
+void checkEnergyConservation(const std::vector<Particle>& particlesBefore, const std::vector<Particle>& particlesAfter, double G, double tolerance = 1e-6) 
+{
+    double energyBefore = computeTotalEnergy(particlesBefore, G);
+    double energyAfter = computeTotalEnergy(particlesAfter, G);
+
+    double energyDifference = std::abs(energyAfter - energyBefore);
+    std::cout << "ENERGY CHECK: " << energyDifference << std::endl;
+}

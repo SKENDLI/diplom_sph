@@ -18,6 +18,7 @@ int main()
         sum_smoothingLength.resize(numParticles);
         force_halo_x.resize(numParticles);
         force_halo_y.resize(numParticles);
+        initialParticles.resize(numParticles);
     }
 
     std::string path = "";
@@ -33,6 +34,8 @@ int main()
             initializeGasCloud();
             saveParticlesToFile(t, Dt);
             std::cout << Dt << std::endl;
+            initialParticles = particles;
+            checkEnergyConservation(initialParticles, particles, G);
             SPH();
             return 0;
         case 2:
@@ -111,7 +114,8 @@ void SPH()
             }
         }
         t += tau;
-        std::cout << t << " tau: " << tau << std::endl;
+        //std::cout << t << " tau: " << tau << std::endl;
+        checkEnergyConservation(initialParticles, particles, G);
         if (t >= Dt)
         {
             if (check_print == 0)
@@ -122,7 +126,7 @@ void SPH()
             {
                 saveParticlesToFile(t, Dt);
             }
-            std::cout << t << " DT: " << Dt << std::endl;
+            //std::cout << t << " DT: " << Dt << std::endl;
             Dt += shag_dt;
         }
     }

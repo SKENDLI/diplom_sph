@@ -54,6 +54,7 @@ struct Particle
 
 std::vector<Particle> particles;
 std::vector<Particle> predictedParticles;
+std::vector<Particle> initialParticles;
 
 std::vector <int> neighborCount;
 std::vector <double> sum_rho;
