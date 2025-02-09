@@ -62,16 +62,15 @@ void SPH()
     int check_print = 0;
     int count = 0;
     int count1 = 0;
+    double A = 4.0 * M_PI * G * B_rho * scale_halo * scale_halo;
     while (t <= t_end)
     {
         Predictor();
         dt();
-        double A = 4.0 * M_PI * G * density0 * scale_halo * scale_halo;
         for (int i = 0; i < numParticles; ++i)
         {
             if (particles[i].mass > 0)
             {
-                double r = particles[i].distanceFromCenter;
                 double ksi = computeKsiForHalo(particles[i].x, particles[i].y, 0.0);
                 double force_halo_x = computeForceGrav(ksi, particles[i].x, A, 1.0);
                 double force_halo_y = computeForceGrav(ksi, particles[i].y, A, 1.0);
@@ -102,7 +101,6 @@ void SPH()
         {
             if (predictedParticles[i].mass > 0)
             {
-                double r = predictedParticles[i].distanceFromCenter;
                 double ksi = computeKsiForHalo(predictedParticles[i].x, predictedParticles[i].y, 0.0);
                 double force_halo_x = computeForceGrav(ksi, predictedParticles[i].x, A, 1.0);
                 double force_halo_y = computeForceGrav(ksi, predictedParticles[i].y, A, 1.0);
@@ -112,6 +110,7 @@ void SPH()
                 particles[i].velocityY = predictedParticles[i].velocityY + (sum_velocity_y[i] + force_halo_y) * 0.5 * tau;
                 particles[i].x = predictedParticles[i].x + particles[i].velocityX * 0.5 * tau;
                 particles[i].y = predictedParticles[i].y + particles[i].velocityY * 0.5 * tau;
+
                 particles[i].distanceFromCenter = sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
 
                 if (particles[i].distanceFromCenter < radius)
@@ -124,7 +123,7 @@ void SPH()
             }
         }
         t += tau;
-        //std::cout << t << " tau: " << tau << std::endl;
+        std::cout << t << " tau: " << tau << std::endl;
         checkEnergyConservation(initialParticles, particles, G);
         if (t >= Dt)
         {

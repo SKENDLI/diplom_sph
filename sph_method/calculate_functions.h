@@ -22,6 +22,15 @@ double computeRho(double dist, double rad)
     return 1.0 / (cosh_val * cosh_val);
 }
 
+double fun_mass(double r1, double r2, int Nmm, double pi2, double Lf) {
+    double dr = (r2 - r1) / Nmm;
+    double fun_mass = 0.0;
+    for (int k = 1; k <= Nmm; ++k) {
+        double rr = r1 + dr * (k - 1);
+        fun_mass += 0.5 * (rr * computeRho(rr, Lf) + (rr + dr) * computeRho(rr+dr, Lf)) * dr;
+    }
+    return pi2 * fun_mass;
+}
 
 void Predictor()
 {
@@ -289,8 +298,8 @@ void dt()
         double C = SoundSpeed(particles[i].pressure, particles[i].density);
         double velocity_magnitude = sqrt(particles[i].velocityX * particles[i].velocityX + particles[i].velocityY * particles[i].velocityY);
 
-        dt_cv = 0.24 * 0.4 * particles[i].smoothingLength / (C + 0.6 * (alpha * C + beta * maximum));
-        dt_f = 0.25 * 0.25 * sqrt(particles[i].smoothingLength / velocity_magnitude);
+        dt_cv = 0.3 * particles[i].smoothingLength / (C + 0.6 * (alpha * C + beta * maximum));
+        dt_f = 0.3 * sqrt(particles[i].smoothingLength / velocity_magnitude);
 
         dt = min(dt_cv, dt_f);
         tau = min(tau, dt);
@@ -299,38 +308,45 @@ void dt()
 
 double computeTotalEnergy(const std::vector<Particle>& particles, double G) {
     double totalEnergy = 0.0;
+    int numParticles = particles.size();
 
-    for (int i = 0; i < particles.size(); ++i) {
-        Particle pi = particles[i];
-        // Кинетическая энергия
+    // Кинетическая и внутренняя энергия
+    for (int i = 0; i < numParticles; ++i) {
+        const Particle& pi = particles[i];
         double kineticEnergy = 0.5 * pi.mass * (pi.velocityX * pi.velocityX + pi.velocityY * pi.velocityY);
-
-        // Внутренняя энергия
         double internalEnergy = pi.energy * pi.mass;
+        totalEnergy += kineticEnergy + internalEnergy;
+    }
 
-        // Потенциальная энергия (гравитационная)
-        double potentialEnergy = 0.0;
-        for (int j = 0; j < particles.size(); ++j) {
-            if (i == j) continue;
-            Particle pj = particles[j];
+    // Гравитационная потенциальная энергия
+    for (int i = 0; i < numParticles - 1; ++i) {
+        for (int j = i + 1; j < numParticles; ++j) {
+            const Particle& pi = particles[i];
+            const Particle& pj = particles[j];
+
             double dx = pi.x - pj.x;
             double dy = pi.y - pj.y;
             double distance = sqrt(dx * dx + dy * dy);
-            potentialEnergy -= G * pi.mass * pj.mass / distance;
-        }
 
-        // Суммируем все виды энергии
-        totalEnergy += kineticEnergy + internalEnergy + potentialEnergy;
+            // Избегаем деления на ноль
+            if (distance < 1e-10) continue;
+
+            double potentialEnergy = -G * pi.mass * pj.mass / distance;
+            totalEnergy += potentialEnergy;
+        }
     }
 
     return totalEnergy;
 }
 
-void checkEnergyConservation(const std::vector<Particle>& particlesBefore, const std::vector<Particle>& particlesAfter, double G, double tolerance = 1e-6) 
-{
+void checkEnergyConservation(const std::vector<Particle>& particlesBefore, const std::vector<Particle>& particlesAfter, double G, double tolerance = 1e-6) {
     double energyBefore = computeTotalEnergy(particlesBefore, G);
     double energyAfter = computeTotalEnergy(particlesAfter, G);
 
     double energyDifference = std::abs(energyAfter - energyBefore);
-    std::cout << "ENERGY CHECK: " << energyDifference << std::endl;
+
+    std::cout << "ENERGY CHECK: Difference = " << energyDifference << std::endl;
+    std::cout << "WARNING: Energy conservation violated!" << std::endl;
+    std::cout << "Energy before: " << energyBefore << std::endl;
+    std::cout << "Energy after: " << energyAfter << std::endl;
 }

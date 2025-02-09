@@ -1,2 +1,2 @@
-numParticles,radius,density0,pressure,tau,gamma,alpha,beta,eps,maximum,t_end,t,Dt,system_Mass,scale,mass_source,a_halo,b_halo,c_halo,massa_halo,scale_halo
-15000,1.0,1.0,10.0,1.0,1.4,1.0,2.0,0.1,-99999999,1.03,0.0,0.0,1,0.25,0.0,1.0,1.0,1.0,5,0.1
+numParticles,radius,density0,pressure,tau,gamma,alpha,beta,eps,maximum,t_end,t,Dt,system_Mass,scale,mass_source,a_halo,b_halo,c_halo,massa_halo,scale_halo,Mah_d,r_core,rmax_hl,AMS
+100000,1.0,1.0,10.0,1.0,1.4,1.0,2.0,0.1,-99999999,1.03,0.0,0.0,1,0.25,0.0,1.0,1.0,1.0,4,0.1,20,0.1,1.0,4

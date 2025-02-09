@@ -58,7 +58,7 @@ def process_files(input_folder, output_folder):
         
         # Давление (с палитрой magma)
         pressure_values = [p['pressure'] for p in particles]
-        sc1 = axes[0].scatter(x_coords, y_coords, c=pressure_values, cmap='magma', s=8, edgecolors="none")
+        sc1 = axes[0].scatter(x_coords, y_coords, c=pressure_values, cmap='magma', s=size_scat, edgecolors="none")
         axes[0].set_title("Давление p", fontsize=20, pad=20)
         axes[0].set_xlabel("x", fontsize=24, labelpad=10)
         axes[0].set_ylabel("y", fontsize=24, labelpad=10)
@@ -76,7 +76,7 @@ def process_files(input_folder, output_folder):
 
         # Плотность (с палитрой viridis)
         density_values = [p['density'] for p in particles]
-        sc2 = axes[1].scatter(x_coords, y_coords, c=density_values, cmap='viridis', s=8, edgecolors="none")
+        sc2 = axes[1].scatter(x_coords, y_coords, c=density_values, cmap='viridis', s=size_scat, edgecolors="none")
         axes[1].set_title(r'Плотность $\rho$', fontsize=20, pad=20)
         axes[1].set_xlabel("x", fontsize=24, labelpad=10)
         axes[1].set_ylabel("y", fontsize=24, labelpad=10)
@@ -94,7 +94,7 @@ def process_files(input_folder, output_folder):
 
         # Добавляем вектора скорости для частицы
         # Выбираем 1% частиц для отображения векторов скорости
-        sample_particles = np.random.choice(particles, size=max(1, len(particles) // 100), replace=False)
+        sample_particles = np.random.choice(particles, size=max(1, len(particles) // 10000), replace=False)
 
         for p in sample_particles:
             # Нормализуем вектор скорости
@@ -119,7 +119,7 @@ def process_files(input_folder, output_folder):
 
 # Папка с бинарными файлами
 input_folder = 'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/data'  # Путь к папке с .bin файлами
-
+size_scat = 3
 # Папка для сохранения картинок
 output_folder = 'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/Визуализация/Images'  # Путь к папке для сохранения картинок
 

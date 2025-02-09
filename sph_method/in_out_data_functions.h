@@ -124,6 +124,18 @@ int configuration()
         std::getline(iss, value, ',');
         scale_halo = std::stod(value);
 
+        std::getline(iss, value, ',');
+        Mah_d = std::stod(value);
+
+        std::getline(iss, value, ',');
+        r_core = std::stod(value);
+
+        std::getline(iss, value, ',');
+        rmax_hl = std::stod(value);
+
+        std::getline(iss, value, ',');
+        AMS = std::stod(value);
+
         std::cout << "Variables value:" << std::endl;
         std::cout << "numParticles = " << numParticles << std::endl;
         std::cout << "radius = " << radius << std::endl;
@@ -145,6 +157,10 @@ int configuration()
         std::cout << "c_halo = " << c_halo << std::endl;
         std::cout << "massa_halo = " << massa_halo << std::endl;
         std::cout << "scale_halo = " << scale_halo << std::endl;
+        std::cout << "mah_d = " << Mah_d << std::endl;
+        std::cout << "r_core = " << r_core << std::endl;
+        std::cout << "rmax_hl = " << rmax_hl << std::endl;
+        std::cout << "AMS = " << AMS << std::endl;
 
     }
     else

@@ -78,10 +78,10 @@ particles = read_particle_data("C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_m
 
 # Выбор данных для построения графика
 x_column = "radius"  # Используем радиус как X
-y_column = "density"  # Можно выбрать любую характеристику, например, скорость по X
+y_column = "pressure"  # Можно выбрать любую характеристику, например, скорость по X
 
 # Визуализируем выборочные данные
-visualize_particle_data(particles, x_column, y_column)
+#visualize_particle_data(particles, x_column, y_column)
 
 # Визуализируем зависимость скорости от радиуса
-#visualize_velocity_by_radius(particles)
+visualize_velocity_by_radius(particles)

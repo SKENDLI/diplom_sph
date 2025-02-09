@@ -7,7 +7,15 @@ void initializeGasCloud() {
     int numRings = 100;
     double ringWidth = radius / numRings;
 
-    double A = 4.0 * M_PI * G * density0 * scale_halo * scale_halo;
+    double RCORE1 = rmax_hl / r_core;
+    double A_G = AMS / (RCORE1 - atan(RCORE1));
+    B_rho = system_Mass / fun_mass(r_core, rmax_hl, 1000, M_PI, scale_radius);
+    double rd_mah = radius;
+    double B_p = B_rho / gamma * rd_mah * rd_mah * A_G / (Mah_d * Mah_d);
+
+    double A = 4.0 * M_PI * G * B_rho * scale_halo * scale_halo;
+
+
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
@@ -34,10 +42,9 @@ void initializeGasCloud() {
             double x = r * cos(phi);
             double y = r * sin(phi);
             double distance = sqrt(x * x + y * y);
-
             // Вычисляем плотность и давление
-            double density = computeRho(distance, scale_radius) * density0;
-            double pressure_local = pressure * pow(density, gamma);
+            double density = B_rho * computeRho(distance, scale_radius);
+            double pressure_local = B_p * pow(density / B_rho, gamma);
 
             double dRho_dr = -2.0 * sinh(distance / scale_radius) / (scale_radius * pow(cosh(distance / scale_radius), 3));
             // Градиент давления
@@ -81,18 +88,18 @@ void initializeGasCloud() {
         }
     }
     // Заполнение оставшихся частиц в центре
-    double r_center = 0.1 * radius; // Радиус центральной области
+    double r_center = r_core * radius; // Радиус центральной области
     while (particleIndex < numParticles) {
         // Распределение частиц в пределах малого радиуса
         double r = sqrt(dis(gen)) * r_center;
+
         double phi = 2.0 * M_PI * dis(gen);
         double x = r * cos(phi);
         double y = r * sin(phi);
         double distance = sqrt(x * x + y * y);
-
         // Вычисляем плотность и давление
-        double density = computeRho(distance, scale_radius) * density0;
-        double pressure_local = pressure * pow(density, gamma);
+        double density = B_rho * computeRho(distance, scale_radius);
+        double pressure_local = B_p * pow(density / B_rho, gamma);
 
         double dRho_dr = -2.0 * sinh(distance / scale_radius) / (scale_radius * pow(cosh(distance / scale_radius), 3));
         // Градиент давления
