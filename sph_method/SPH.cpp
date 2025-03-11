@@ -55,84 +55,92 @@ int main()
     return 0;
 }
 
-void SPH()
-{
-    double temp = 0.0;
-    int check = 0;
+void SPH() {
+    // Добавляем временные массивы для хранения старых ускорений
+    std::vector<double> sum_velocity_x_old(numParticles);
+    std::vector<double> sum_velocity_y_old(numParticles);
+    std::vector<double> f_halo_x_old(numParticles);
+    std::vector<double> f_halo_y_old(numParticles);
+
     int check_print = 0;
-    int count = 0;
-    int count1 = 0;
-    double A = 4.0 * M_PI * G * B_rho * scale_halo * scale_halo;
-    while (t <= t_end)
-    {
-        Predictor();
-        dt();
-        for (int i = 0; i < numParticles; ++i)
-        {
-            if (particles[i].mass > 0)
-            {
-                double ksi = computeKsiForHalo(particles[i].x, particles[i].y, 0.0);
-                double force_halo_x = computeForceGrav(ksi, particles[i].x, A, 1.0);
-                double force_halo_y = computeForceGrav(ksi, particles[i].y, A, 1.0);
+    while (t <= t_end) {
+        ComputeForces(particles, sum_rho, sum_velocity_x, sum_velocity_y, sum_energy, radius);
 
-                // Обновляем скорость и положение (предиктор)
-                predictedParticles[i].velocityX = particles[i].velocityX + (sum_velocity_x[i] + force_halo_x) * 0.5 * tau;
-                predictedParticles[i].velocityY = particles[i].velocityY + (sum_velocity_y[i] + force_halo_y) * 0.5 * tau;
-                predictedParticles[i].x = particles[i].x + predictedParticles[i].velocityX * 0.5 * tau;
-                predictedParticles[i].y = particles[i].y + predictedParticles[i].velocityY * 0.5 * tau;
+        // Сохраняем ускорения исходных частиц
+        sum_velocity_x_old = sum_velocity_x;
+        sum_velocity_y_old = sum_velocity_y;
 
-                // Исправлено: вычисляем расстояние от центра по новым координатам
-                predictedParticles[i].distanceFromCenter = sqrt(predictedParticles[i].x * predictedParticles[i].x + predictedParticles[i].y * predictedParticles[i].y);
+        // Вычисляем гравитацию гало для исходных частиц
+#pragma omp parallel for
+        for (int i = 0; i < numParticles; ++i) {
+            //if (particles[i].distanceFromCenter >= radius) continue;
+            double ksi = computeKsiForHalo(particles[i].x, particles[i].y, 0.0);
+            f_halo_x_old[i] = computeForceGrav(ksi, particles[i].x, A, a_halo);
+            f_halo_y_old[i] = computeForceGrav(ksi, particles[i].y, A, b_halo);
+        }
+        //TODO УБРАТЬ ГРАНИЦЫ!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
-                if (predictedParticles[i].distanceFromCenter < radius)
-                {
-                    predictedParticles[i].mass = particles[i].mass;
-                    predictedParticles[i].density = particles[i].density + sum_rho[i] * 0.5 * tau;
-                    predictedParticles[i].energy = particles[i].energy + sum_energy[i] * 0.5 * tau;
-                    predictedParticles[i].pressure = (gamma - 1.0) * predictedParticles[i].energy * predictedParticles[i].density;
-                    predictedParticles[i].smoothingLength = particles[i].smoothingLength + sum_smoothingLength[i] * 0.5 * tau;
-                }
-            }
+        dt();  // Обновляем tau
+
+        // Этап 3: Предиктор (полушаг)
+#pragma omp parallel for
+        for (int i = 0; i < numParticles; ++i) {
+            //if (particles[i].distanceFromCenter >= radius) continue;
+
+            // Используем сохранённые ускорения исходных частиц
+            predictedParticles[i] = particles[i];
+            predictedParticles[i].velocityX += (sum_velocity_x_old[i] + f_halo_x_old[i]) * 0.5 * tau;
+            predictedParticles[i].velocityY += (sum_velocity_y_old[i] + f_halo_y_old[i]) * 0.5 * tau;
+            predictedParticles[i].x += predictedParticles[i].velocityX * 0.5 * tau;
+            predictedParticles[i].y += predictedParticles[i].velocityY * 0.5 * tau;
+            predictedParticles[i].distanceFromCenter = std::hypot(predictedParticles[i].x, predictedParticles[i].y);
         }
 
-        Korrector();
+        ComputeForces(predictedParticles, sum_rho, sum_velocity_x, sum_velocity_y, sum_energy, radius);
 
-        for (int i = 0; i < numParticles; ++i)
-        {
-            if (predictedParticles[i].mass > 0)
-            {
-                double ksi = computeKsiForHalo(predictedParticles[i].x, predictedParticles[i].y, 0.0);
-                double force_halo_x = computeForceGrav(ksi, predictedParticles[i].x, A, 1.0);
-                double force_halo_y = computeForceGrav(ksi, predictedParticles[i].y, A, 1.0);
+        // Этап 5: Корректор (полный шаг)
+#pragma omp parallel for
+        for (int i = 0; i < numParticles; ++i) {
+            //if (particles[i].distanceFromCenter >= radius) continue;
 
-                // Обновляем скорость и положение (корректор)
-                particles[i].velocityX = predictedParticles[i].velocityX + (sum_velocity_x[i] + force_halo_x) * 0.5 * tau;
-                particles[i].velocityY = predictedParticles[i].velocityY + (sum_velocity_y[i] + force_halo_y) * 0.5 * tau;
-                particles[i].x = predictedParticles[i].x + particles[i].velocityX * 0.5 * tau;
-                particles[i].y = predictedParticles[i].y + particles[i].velocityY * 0.5 * tau;
+            // Вычисляем гравитацию гало для предсказанных частиц
+            double ksi_pred = computeKsiForHalo(predictedParticles[i].x, predictedParticles[i].y, 0.0);
+            double f_halo_x_pred = computeForceGrav(ksi_pred, predictedParticles[i].x, A, a_halo);
+            double f_halo_y_pred = computeForceGrav(ksi_pred, predictedParticles[i].y, A, b_halo);
 
-                particles[i].distanceFromCenter = sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
+            // Вычисляем ускорения для корректора
+            double a_old_x = sum_velocity_x_old[i] + f_halo_x_old[i];
+            double a_pred_x = sum_velocity_x[i] + f_halo_x_pred;
+            double a_old_y = sum_velocity_y_old[i] + f_halo_y_old[i];
+            double a_pred_y = sum_velocity_y[i] + f_halo_y_pred;
 
-                if (particles[i].distanceFromCenter < radius)
-                {
-                    particles[i].density = predictedParticles[i].density + sum_rho[i] * 0.5 * tau;
-                    particles[i].energy = predictedParticles[i].energy + sum_energy[i] * 0.5 * tau;
-                    particles[i].pressure = (gamma - 1.0) * particles[i].energy * particles[i].density;
-                    particles[i].smoothingLength = predictedParticles[i].smoothingLength + sum_smoothingLength[i] * 0.5 * tau;
-                }
-            }
+            // Обновляем скорость с учётом среднего ускорения
+            particles[i].velocityX = predictedParticles[i].velocityX + (a_pred_x + a_old_x) * tau / 2;
+            particles[i].velocityY = predictedParticles[i].velocityY + (a_pred_y + a_old_y) * tau / 2;
+
+            // Обновляем положение с усреднением скоростей
+            particles[i].x = predictedParticles[i].x + 0.5 * tau * (particles[i].velocityX + predictedParticles[i].velocityX);
+            particles[i].y = predictedParticles[i].y + 0.5 * tau * (particles[i].velocityY + predictedParticles[i].velocityY);
+            particles[i].distanceFromCenter = std::hypot(particles[i].x, particles[i].y);
         }
+
+        // Этап 6: Обновление параметров
+#pragma omp parallel for
+        for (int i = 0; i < numParticles; ++i) {
+            particles[i].density += sum_rho[i] * tau;
+            particles[i].energy += sum_energy[i] * tau;
+            particles[i].pressure = (gamma - 1.0) * particles[i].energy * particles[i].density;
+            particles[i].smoothingLength += sum_smoothingLength[i] * tau;
+        }
+        
         t += tau;
-        std::cout << t << " tau: " << tau << std::endl;
-        checkEnergyConservation(initialParticles, particles, G);
-        if (t >= Dt)
-        {
-            if (check_print == 0)
-            {
+        std::cout << "Time: " << t << " | dt: " << tau << std::endl;
+        //checkEnergyConservation(initialParticles, particles, G);
+        if (t >= Dt) {
+            if (check_print == 0) {
                 check_print = 1;
             }
-            else
-            {
+            else {
                 saveParticlesToFile(t, Dt);
             }
             std::cout << t << " DT: " << Dt << std::endl;
