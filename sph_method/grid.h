@@ -1,126 +1,78 @@
 #pragma once
-class GasDiskGrid {
-    // Конфигурация сетки
-    double domain_radius;  // Радиус моделируемой области
-    double cell_size;      // Размер ячейки (обычно ~max_h)
-
-    // Границы сетки
-    double x_min, x_max;
-    double y_min, y_max;
-
-    // Топология сетки
-    int num_cells_x;
-    int num_cells_y;
-
-    // Данные
-    std::vector<std::vector<std::vector<Particle*>>> cells;
-
+class Grid {
 public:
-    GasDiskGrid(double disk_radius, double max_h)
-        : domain_radius(disk_radius),
-        cell_size(max_h * 1.2)  // Запас 20% для перекрытия
-    {
-        // Инициализация границ
-        x_min = -domain_radius - cell_size * 2;
-        x_max = domain_radius + cell_size * 2;
-        y_min = -domain_radius - cell_size * 2;
-        y_max = domain_radius + cell_size * 2;
-
-        // Расчёт числа ячеек
-        num_cells_x = int((x_max - x_min) / cell_size) + 1;
-        num_cells_y = int((y_max - y_min) / cell_size) + 1;
-
-        // Выделение памяти
-        cells.resize(num_cells_x);
-        for (auto& col : cells) {
-            col.resize(num_cells_y);
-        }
+    Grid(double minX, double maxX, double minY, double maxY, double cellSize)
+        : minX(minX), maxX(maxX), minY(minY), maxY(maxY), cellSize(cellSize) {
+        numCellsX = static_cast<int>(std::ceil((maxX - minX) / cellSize));
+        numCellsY = static_cast<int>(std::ceil((maxY - minY) / cellSize));
+        cells.resize(numCellsX * numCellsY);
     }
 
-    // Обновление сетки с новыми позициями частиц
-    void rebuild(const std::vector<Particle>& particles) {
-        // Очистка предыдущих данных
-        for (auto& col : cells) {
-            for (auto& cell : col) {
-                cell.clear();
+    void build(const std::vector<Particle>& particles) {
+        for (auto& cell : cells) {
+            cell.clear();
+        }
+        for (size_t i = 0; i < particles.size(); ++i) {
+            int cellX = static_cast<int>(std::floor((particles[i].x - minX) / cellSize));
+            int cellY = static_cast<int>(std::floor((particles[i].y - minY) / cellSize));
+            if (cellX >= 0 && cellX < numCellsX && cellY >= 0 && cellY < numCellsY) {
+                int cellIndex = cellY * numCellsX + cellX;
+                cells[cellIndex].push_back(i);
             }
         }
-
-        // Распределение частиц
-        for (const auto& p : particles) {
-            // Только частицы внутри рабочей области
-            if (p.distanceFromCenter > domain_radius) continue;
-
-            // Вычисление индексов ячейки
-            int i = int((p.x - x_min) / cell_size);
-            int j = int((p.y - y_min) / cell_size);
-
-            // Ограничение индексов
-            if (i < 0) i = 0;
-            if (j < 0) j = 0;
-            if (i >= num_cells_x) i = num_cells_x - 1;
-            if (j >= num_cells_y) j = num_cells_y - 1;
-
-            cells[i][j].push_back(const_cast<Particle*>(&p));
-        }
     }
 
-    // Получение кандидатов в соседи
-    void get_neighbors(const Particle* p, std::vector<Particle*>& neighbors) const {
-        neighbors.clear();
+    std::vector<size_t> getNeighbors(size_t particleIndex, const std::vector<Particle>& particles, double searchRadius) {
+        std::vector<size_t> neighbors;
+        const Particle& p = particles[particleIndex];
+        // Вычисляем координаты ячейки для текущей частицы
+        int cellX = static_cast<int>(std::floor((p.x - minX) / cellSize));
+        int cellY = static_cast<int>(std::floor((p.y - minY) / cellSize));
 
-        // Определение центральной ячейки
-        const int ic = int((p->x - x_min) / cell_size);
-        const int jc = int((p->y - y_min) / cell_size);
+        // Определяем границы поиска: текущая ячейка ±1
+        int minCellX = max(0, cellX - 1);
+        int maxCellX = min(numCellsX - 1, cellX + 1);
+        int minCellY = max(0, cellY - 1);
+        int maxCellY = min(numCellsY - 1, cellY + 1);
 
-        // Поиск в окрестности 5x5 ячеек
-        for (int di = -2; di <= 2; ++di) {
-            for (int dj = -2; dj <= 2; ++dj) {
-                const int i = ic + di;
-                const int j = jc + dj;
-
-                // Проверка границ сетки
-                if (i < 0 || i >= num_cells_x) continue;
-                if (j < 0 || j >= num_cells_y) continue;
-
-                // Фильтрация ячеек вне диска
-                if (!cell_intersects_disk(i, j)) continue;
-
-                // Сбор частиц
-                for (auto* candidate : cells[i][j]) {
-                    // Проверка радиального расстояния
-                    const double dx = p->x - candidate->x;
-                    const double dy = p->y - candidate->y;
-                    if (dx * dx + dy * dy < (2.0 * p->smoothingLength) * (2.0 * p->smoothingLength)) {
-                        if (candidate != p) {
-                            neighbors.push_back(candidate);
+        // Проходим по всем соседним ячейкам (включая текущую)
+        for (int cy = minCellY; cy <= maxCellY; ++cy) {
+            for (int cx = minCellX; cx <= maxCellX; ++cx) {
+                int cellIndex = cy * numCellsX + cx;
+                // Проверяем все частицы в текущей ячейке
+                for (size_t idx : cells[cellIndex]) {
+                    if (idx != particleIndex) { // Исключаем саму частицу
+                        const Particle& q = particles[idx];
+                        double dx = p.x - q.x;
+                        double dy = p.y - q.y;
+                        double distanceSquared = dx * dx + dy * dy;
+                        // Добавляем только те частицы, что находятся в пределах searchRadius
+                        if (distanceSquared < searchRadius * searchRadius) {
+                            neighbors.push_back(idx);
                         }
                     }
                 }
             }
         }
+        return neighbors;
+    }
+
+    void printCells() const {
+        std::cout << "CELLS CONTENT:\n";
+        for (int y = 0; y < numCellsY; ++y) {
+            for (int x = 0; x < numCellsX; ++x) {
+                int cellIndex = y * numCellsX + x;
+                if (!cells[cellIndex].empty()) {
+                    std::cout << "Cell (" << x << ", " << y << ") [cellCount " << cells[cellIndex].size() << "]: ";
+                    std::cout << "\n";
+                }
+            }
+        }
+        std::cout << "END CELL CONTENT.\n";
     }
 
 private:
-    // Проверка пересечения ячейки с диском
-    bool cell_intersects_disk(int i, int j) const {
-        // Координаты углов ячейки
-        const double x1 = x_min + i * cell_size;
-        const double y1 = y_min + j * cell_size;
-        const double x2 = x1 + cell_size;
-        const double y2 = y1 + cell_size;
-
-        const double cx = (x1 <= 0 && x2 >= 0) ? 0 : (fabs(x1) < fabs(x2) ? x1 : x2);
-        const double cy = (y1 <= 0 && y2 >= 0) ? 0 : (fabs(y1) < fabs(y2) ? y1 : y2);
-
-        // Расстояние ближайшей точки
-        const double r_min = sqrt(cx * cx + cy * cy);
-
-        // Дальняя точка
-        const double fx = (fabs(x1) > fabs(x2)) ? x1 : x2;
-        const double fy = (fabs(y1) > fabs(y2)) ? y1 : y2;
-        const double r_max = sqrt(fx * fx + fy * fy);
-
-        return !(r_min > domain_radius || r_max < (domain_radius - cell_size * 1.414));
-    }
+    double minX, maxX, minY, maxY, cellSize;
+    int numCellsX, numCellsY;
+    std::vector<std::vector<size_t>> cells;
 };

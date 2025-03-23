@@ -10,9 +10,9 @@ double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ) {
     return -A * (1.0 / ksi - 1.0 / (ksi * ksi) * atan(ksi)) * (koord / (ksi * halo_OXYZ));
 }
 
-double computeRho(double distance, double scale_radius)
+double computeRho(double Lf, double rr)
 {
-    double cosh_val = cosh(distance / scale_radius);
+    double cosh_val = cosh(rr / Lf);
     return 1.0 / (cosh_val);
 }
 
@@ -22,13 +22,39 @@ double dComputeRho(double distance, double scale_radius)
 }
 
 double fun_mass(double r1, double r2, int Nmm, double pi2, double Lf) {
-    double dr = (r2 - r1) / Nmm;
     double fun_mass = 0.0;
+    double dr = (r2 - r1) / static_cast<double>(Nmm);
+
     for (int k = 1; k <= Nmm; ++k) {
-        double rr = r1 + dr * (k - 1);
-        fun_mass += 0.5 * (rr * computeRho(rr, Lf) + (rr + dr) * computeRho(rr+dr, Lf)) * dr;
+        double rr = r1 + dr * static_cast<double>(k - 1);
+        fun_mass += 0.5 * (rr * computeRho(Lf, rr) + (rr + dr) * computeRho(Lf, rr + dr)) * dr;
     }
-    return pi2 * fun_mass;
+
+    fun_mass *= pi2;
+    return fun_mass;
+}
+
+
+double mass_difference(double rr, double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2) {
+    double current_mass = B_rho * fun_mass(rrk, rr, 1000, pi2, Lf);
+    return current_mass - target_mass;
+}
+
+double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2) {
+    double rr = rrk + (rrk - rrk_1); // Начальное приближение
+    double drr = 1e-5;                // Шаг для численной производной
+    double tolerance = 1e-6;          // Точность
+    int max_iter = 100;               // Максимум итераций
+    for (int iter = 0; iter < max_iter; ++iter) {
+        double ff_rr = mass_difference(rr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
+        double ff_rr1 = mass_difference(rr + drr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
+        double dff = (ff_rr1 - ff_rr) != 0 ? drr * ff_rr / (ff_rr1 - ff_rr) : 0; // Защита от деления на 0
+        rr -= dff;
+        if (std::abs(ff_rr) < tolerance && std::abs(dff) < tolerance) {
+            break;
+        }
+    }
+    return rr;
 }
 
 void ComputeForces(const std::vector<Particle>& particles,
@@ -38,6 +64,8 @@ void ComputeForces(const std::vector<Particle>& particles,
     std::vector<double>& sum_energy,
     double radius_limit)
 {
+    if (particles.empty()) return;
+
     double max_h = 0.0;
     for (const auto& p : particles) {
         if (p.distanceFromCenter < radius_limit) {
@@ -45,62 +73,61 @@ void ComputeForces(const std::vector<Particle>& particles,
         }
     }
 
-    GasDiskGrid grid(radius_limit, max_h);
-    grid.rebuild(particles);
-#pragma omp parallel for
-    for (int i = 0; i < particles.size(); ++i) {
+    double cell_size = 2.0 * max_h;
+    Grid grid(-radius, radius, -radius, radius, cell_size);
+
+    grid.build(particles);
+    for (size_t i = 0; i < particles.size(); ++i) {
         const Particle& pi = particles[i];
-        if (pi.distanceFromCenter >= radius_limit) continue;
-        std::vector<Particle*> neighbors;
-        grid.get_neighbors(&pi, neighbors);
+        //if (pi.distanceFromCenter >= radius_limit) continue;
+
+        std::vector<size_t> neighbor_indices = grid.getNeighbors(i, particles, 2 * pi.smoothingLength);
 
         double sum_rho_i = 0.0;
         double sum_vx_i = 0.0;
         double sum_vy_i = 0.0;
         double sum_energy_i = 0.0;
 
-        for (Particle* pj : neighbors) {
-            if (&pi == pj) continue;
+        for (size_t idx : neighbor_indices) {
+            const Particle& pj = particles[idx];
+            if (&pi == &pj) continue;
 
-            const double h_avg = 0.5 * (pi.smoothingLength + pj->smoothingLength);
-            const double dx = pi.x - pj->x;
-            const double dy = pi.y - pj->y;
-            const double r = std::sqrt(dx * dx + dy * dy);
+            double h_avg = 0.5 * (pi.smoothingLength + pj.smoothingLength);
+            double dx = pi.x - pj.x;
+            double dy = pi.y - pj.y;
+            double velDiffX = pi.velocityX - pj.velocityX;
+            double velDiffY = pi.velocityY - pj.velocityY;
+            double r = sqrt(dx * dx + dy * dy);
+            if (!((r / h_avg <= 2.0) && (r / h_avg > 0.0))) {
+                continue;
+            }
+            double dWx = dW(dx, h_avg, r);
+            double dWy = dW(dy, h_avg, r);
+            double dWxy = dWx * velDiffX + dWy * velDiffY;
+            sum_rho_i += pi.mass * dWxy;
 
-            if (r > 2.0 * h_avg) continue;
+            double P_term = (pi.pressure / (pi.density * pi.density)) +
+                (pj.pressure / (pj.density * pj.density));
+            sum_vx_i += -pj.mass * P_term * dWx;
+            sum_vy_i += -pj.mass * P_term * dWy;
 
-            const double dWx = dW(dx, h_avg, r);
-            const double dWy = dW(dy, h_avg, r);
-
-            // Производная плотности
-            sum_rho_i += pj->mass * (
-                (pj->velocityX - pi.velocityX) * dWx +
-                (pj->velocityY - pi.velocityY) * dWy);
-
-            // Сила давления
-            const double P_term = (pi.pressure / (pi.density * pi.density) +
-                pj->pressure / (pj->density * pj->density));
-            sum_vx_i += -pj->mass * P_term * dWx;
-            sum_vy_i += -pj->mass * P_term * dWy;
-
-            // Вязкость
-            const double visc = Viscosity(
+            double visc = Viscosity(
                 pi.x, pi.y,
-                pj->x, pj->y,
-                pi.velocityX - pj->velocityX,
-                pi.velocityY - pj->velocityY,
+                pj.x, pj.y,
+                pi.velocityX - pj.velocityX,
+                pi.velocityY - pj.velocityY,
                 h_avg,
-                pi.density, pj->density,
-                pi.pressure, pj->pressure,
+                pi.density, pj.density,
+                pi.pressure, pj.pressure,
                 r
             );
-            sum_vx_i += -pj->mass * visc * dWx;
-            sum_vy_i += -pj->mass * visc * dWy;
 
-            // Энергия
-            sum_energy_i += 0.5 * pj->mass * (P_term + visc) * (
-                (pi.velocityX - pj->velocityX) * dWx +
-                (pi.velocityY - pj->velocityY) * dWy
+            sum_vx_i += -pj.mass * visc * dWx;
+            sum_vy_i += -pj.mass * visc * dWy;
+
+            sum_energy_i += 0.5 * pj.mass * (P_term + visc) * (
+                (pi.velocityX - pj.velocityX) * dWx +
+                (pi.velocityY - pj.velocityY) * dWy
                 );
         }
 
@@ -145,7 +172,7 @@ void Korrector(double dt) {
 }
 
 double dW(double r_ij, double h, double r) {
-    const double sigma = 15.0 / (7.0 * M_PI * h * h * h); // Правильная нормировка
+    const double sigma = 15.0 / (7.0 * M_PI * h * h * h);
     double q = r / h;
     double z = 0.0;
 
@@ -156,10 +183,10 @@ double dW(double r_ij, double h, double r) {
         z = -0.75 * pow(2.0 - q, 2);
     }
 
-    return z * sigma * r_ij / r; // Градиент по компонентам
+    return z * sigma * r_ij / r;
 }
 
-double Viscosity(
+double Viscosity (
     double x_i, double y_i,
     double x_j, double y_j,
     double velocity_ij_x, double velocity_ij_y,
@@ -168,21 +195,23 @@ double Viscosity(
     double pressure_i, double pressure_j,
     double r_ij
 ) {
-    double dx = x_i - x_j;
-    double dy = y_i - y_j;
-    double r = std::sqrt(dx * dx + dy * dy);
-    if (r == 0.0) return 0.0;
-
-    double v_rel = velocity_ij_x * dx + velocity_ij_y * dy;
-    if (v_rel > 0.0) return 0.0;
-
+    double c_i = SoundSpeed(pressure_i, rho_i);
+    double c_j = SoundSpeed(pressure_j, rho_j);
     double rho_ij = (rho_i + rho_j) * 0.5;
-    double c_ij = SoundSpeed(pressure_i, rho_i) + SoundSpeed(pressure_j, rho_j);
-    double mu = -v_rel / (r + 1e-5);
-    if (mu > maximum) {
+    double c_ij = SoundSpeed(pressure_i, rho_i) + SoundSpeed(pressure_j, rho_j) * 0.5;
+    double x_ij = x_i - x_j;
+    double y_ij = y_i - y_j;
+    double r = sqrt(x_ij * x_ij + y_ij * y_ij);
+    double mu = (h_ij * (velocity_ij_x * x_ij + velocity_ij_y * y_ij)) / (r * r + eps * eps * h_ij * h_ij);
+
+    double result = 0.0;
+    if ((velocity_ij_x * x_ij + velocity_ij_y * y_ij) < 0.0) {
+        result = (-mu * alpha * c_ij + beta * mu * mu) / rho_ij;
+    }
+    if (mu >= maximum) {
         maximum = mu;
     }
-    return (alpha * c_ij * mu + beta * mu * mu) / rho_ij;
+    return result;
 }
 
 double SoundSpeed(double p_i, double rho_i)
@@ -193,6 +222,7 @@ double SoundSpeed(double p_i, double rho_i)
 void dt()
 {
     double dt_cv, dt_f, dt;
+
     for (int i = 0; i < numParticles; i++)
     {
         if (particles[i].distanceFromCenter > radius)
@@ -203,9 +233,8 @@ void dt()
         double C = SoundSpeed(particles[i].pressure, particles[i].density);
         double velocity_magnitude = sqrt(particles[i].velocityX * particles[i].velocityX + particles[i].velocityY * particles[i].velocityY);
 
-        dt_cv = 0.3 * particles[i].smoothingLength / (C + 0.6 * (alpha * C + beta * maximum));
-        dt_f = 0.3 * sqrt(particles[i].smoothingLength / velocity_magnitude);
-
+        dt_cv = 0.2 * particles[i].smoothingLength / (C + 0.6 * (alpha * C + beta * maximum));
+        dt_f = 0.2 * sqrt(particles[i].smoothingLength / velocity_magnitude);
         dt = min(dt_cv, dt_f);
         tau = min(tau, dt);
     }

@@ -42,6 +42,7 @@ def process_single_file(args):
     
     x_coords = [p['x'] for p in particles]
     y_coords = [p['y'] for p in particles]
+    # Вычисление минимальных и максимальных значений
     
     pressure_values = [p['pressure'] for p in particles]
     sc1 = axes[0].scatter(x_coords, y_coords, c=pressure_values, cmap='magma', s=size_scat, edgecolors="none")
@@ -55,7 +56,7 @@ def process_single_file(args):
     cax1 = divider1.append_axes("right", size="5%", pad=0.1)
     cbar1 = plt.colorbar(sc1, cax=cax1)
     cbar1.ax.tick_params(labelsize=16)
-    
+
     density_values = [p['density'] for p in particles]
     sc2 = axes[1].scatter(x_coords, y_coords, c=density_values, cmap='viridis', s=size_scat, edgecolors="none")
     axes[1].set_title(r'Плотность $\rho$', fontsize=20, pad=20)
@@ -108,5 +109,5 @@ if __name__ == '__main__':
     input_folder = r'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/data'
     output_folder = r'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/Визуализация/Images'
     size_scat = 3
-    
+
     process_files_parallel(input_folder, output_folder, size_scat)

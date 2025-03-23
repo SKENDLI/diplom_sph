@@ -29,6 +29,7 @@ void saveParticlesToFile(double times, double Dt)
     // Запись данных частиц
     for (const auto& particle : particles)
     {
+        //if (particle.x > 3.0 || particle.x < -3.0 || particle.y > 3.0 || particle.y < -3.0) continue;
         fout.write(reinterpret_cast<const char*>(&particle.x), sizeof(particle.x));
         fout.write(reinterpret_cast<const char*>(&particle.y), sizeof(particle.y));
         fout.write(reinterpret_cast<const char*>(&particle.density), sizeof(particle.density));
@@ -68,12 +69,6 @@ int configuration()
         radius = std::stod(value);
 
         std::getline(iss, value, ',');
-        density0 = std::stod(value);
-
-        std::getline(iss, value, ',');
-        pressure = std::stod(value);
-
-        std::getline(iss, value, ',');
         tau = std::stod(value);
 
         std::getline(iss, value, ',');
@@ -89,9 +84,6 @@ int configuration()
         eps = std::stod(value);
 
         std::getline(iss, value, ',');
-        maximum = std::stod(value);
-
-        std::getline(iss, value, ',');
         t_end = std::stod(value);
 
         std::getline(iss, value, ',');
@@ -104,10 +96,7 @@ int configuration()
         system_Mass = std::stod(value);
 
         std::getline(iss, value, ',');
-        scale = radius / std::stod(value);
-
-        std::getline(iss, value, ',');
-        mass_source = std::stod(value);
+        scale = std::stod(value);
 
         std::getline(iss, value, ',');
         a_halo = std::stod(value);
@@ -117,9 +106,6 @@ int configuration()
 
         std::getline(iss, value, ',');
         c_halo = std::stod(value);
-
-        std::getline(iss, value, ',');
-        massa_halo = std::stod(value);
 
         std::getline(iss, value, ',');
         scale_halo = std::stod(value);
@@ -135,12 +121,28 @@ int configuration()
 
         std::getline(iss, value, ',');
         AMS = std::stod(value);
+        
+        std::getline(iss, value, ',');
+        Ap = std::stod(value);
+
+        std::getline(iss, value, ',');
+        Lh = std::stod(value);
+
+        std::getline(iss, value, ',');
+        x_in = std::stod(value);
+
+        std::getline(iss, value, ',');
+        x_ex = std::stod(value);
+
+        std::getline(iss, value, ',');
+        y_in = std::stod(value);
+
+        std::getline(iss, value, ',');
+        y_ex = std::stod(value);
 
         std::cout << "Variables value:" << std::endl;
         std::cout << "numParticles = " << numParticles << std::endl;
         std::cout << "radius = " << radius << std::endl;
-        std::cout << "density0 = " << density0 << std::endl;
-        std::cout << "pressure = " << pressure << std::endl;
         std::cout << "tau = " << tau << std::endl;
         std::cout << "gamma = " << gamma << std::endl;
         std::cout << "alpha = " << alpha << std::endl;
@@ -151,17 +153,20 @@ int configuration()
         std::cout << "t = " << t << std::endl;
         std::cout << "Dt = " << Dt << std::endl;
         std::cout << "system_Mass = " << system_Mass << std::endl;
-        std::cout << "mass_source = " << mass_source << std::endl;
         std::cout << "a_halo = " << a_halo << std::endl;
         std::cout << "b_halo = " << b_halo << std::endl;
         std::cout << "c_halo = " << c_halo << std::endl;
-        std::cout << "massa_halo = " << massa_halo << std::endl;
         std::cout << "scale_halo = " << scale_halo << std::endl;
         std::cout << "mah_d = " << Mah_d << std::endl;
         std::cout << "r_core = " << r_core << std::endl;
         std::cout << "rmax_hl = " << rmax_hl << std::endl;
         std::cout << "AMS = " << AMS << std::endl;
-
+        std::cout << "Ap = " << Ap << std::endl;
+        std::cout << "Lh = " << Lh << std::endl;
+        std::cout << "x_in = " << x_in << std::endl;
+        std::cout << "x_ex = " << x_ex << std::endl;
+        std::cout << "y_in = " << y_in << std::endl;
+        std::cout << "y_ex = " << y_ex << std::endl;
     }
     else
     {
@@ -171,4 +176,36 @@ int configuration()
 
     file.close();
     return 1;
+}
+
+template <typename T>
+void logVariable(const T& var) {
+    std::lock_guard<std::mutex> lock(logMutex);
+    std::ofstream logFile("C:\\Users\\SKENDLI\\Desktop\\diplom\\diplom_sph\\sph_method\\debug.log", std::ios::app);
+
+    if (!logFile) {
+        std::cerr << "Ошибка: не могу открыть debug.log" << std::endl;
+        return;
+    }
+
+    logFile << var << std::endl;
+    logFile.flush();
+}
+
+template <typename T>
+void logVariable(const std::vector<T>& vec) {
+    std::ofstream logFile("debug.log", std::ios::app);
+    if (!logFile) {
+        std::cerr << "Ошибка открытия файла debug.log" << std::endl;
+        return;
+    }
+
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < vec.size(); ++i) {
+        oss << vec[i];
+        if (i != vec.size() - 1) oss << ", ";
+    }
+    oss << "]";
+    logFile << oss.str() << std::endl;
 }

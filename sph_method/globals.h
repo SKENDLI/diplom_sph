@@ -12,30 +12,32 @@
 #include <numeric>
 #include <algorithm>
 #include <omp.h>
+#include <mutex>
+#include <unordered_map>
+#include <functional>
+
+
+std::mutex logMutex;
 
 const double M_PI = 3.14159265358979323846;
 const double G = 6.67430e-11;
 
 int numParticles;
 double radius;
-double density0;
-double pressure;
 double tau;
 double gamma;
 double alpha;
 double beta;
 double eps;
-double maximum;
+double maximum = -INFINITY;
 double t_end;
 double t;
 double Dt;
 double system_Mass;
 double scale;
-double mass_source;
 double a_halo;
 double b_halo;
 double c_halo;
-double massa_halo;
 double scale_halo;
 double shag_dt = 0.01;
 double dt_out = 100;
@@ -45,6 +47,9 @@ double AMS;
 double r_core;
 double rmax_hl;
 double A;
+double Ap;
+double Lh;
+double x_in, x_ex, y_in, y_ex;
 
 struct Particle {
     double x = 0.0;
@@ -73,6 +78,9 @@ std::vector <double> sum_smoothingLength;
 std::vector <double> force_halo_x;
 std::vector <double> force_halo_y;
 
+double max_x = -INFINITY;
+double max_y = -INFINITY;
+
 void saveParticlesToFile(double times, double Dt);
 void initializeGasCloud();
 void Predictor(double dt);
@@ -96,3 +104,9 @@ double Viscosity(
     double r_ij
 );
 double dW(double r_ij, double h, double r);
+double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
+double mass_difference(double rr, double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
+template <typename T>
+void logVariable(const T& var);
+template <typename T>
+void logVariable(const std::vector<T>& vec);
