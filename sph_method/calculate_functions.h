@@ -1,6 +1,7 @@
 ﻿#pragma once
 #include "globals.h"
 #include "grid.h"
+using namespace::std;
 double computeKsiForHalo(double x, double y, double z)
 {
     return sqrt((x / a_halo) * (x / a_halo) + (y / b_halo) * (y / b_halo) + (z / c_halo) * (z / c_halo));
@@ -8,6 +9,44 @@ double computeKsiForHalo(double x, double y, double z)
 
 double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ) {
     return -A * (1.0 / ksi - 1.0 / (ksi * ksi) * atan(ksi)) * (koord / (ksi * halo_OXYZ));
+}
+
+void computeForcesGravCool(vector<Particle>& particles, vector<double>& force_halo_x, vector<double>& force_halo_y) {
+    for (size_t i = 0; i < particles.size(); ++i) {
+        double xi = particles[i].x;
+        double yi = particles[i].y;
+        double ri = hypot(xi, yi);
+
+        // Временная эволюция at
+        double at;
+        if (t <= tau_h) {
+            at = 1.0 - (1.0 - a_h) * t / tau_h;
+        }
+        else {
+            at = a_h;
+        }
+        double at2 = at * at;
+
+        double cw = cos(Omega_h * t);
+        double sw = sin(Omega_h * t);
+        double cw2 = cw * cw;
+        double sw2 = sw * sw;
+
+        // Вычисление ksi
+        double ksi = sqrt(
+            xi * xi * (cw2 + sw2 / at2) +
+            yi * yi * (sw2 + cw2 / at2) +
+            2.0 * xi * yi * cw * sw * (1.0 - 1.0 / at2)
+        );
+
+        // Вычисление силы гало
+        double ksicore = ksi / r_core;
+        double forcehalo = -A_G * (ksicore - atan(ksicore)) / (ksi * ksi * ksi);
+
+        // Компоненты силы
+        force_halo_x[i] = forcehalo * (xi * (cw2 + sw2 / at2) + yi * cw * sw * (1.0 - 1.0 / at2));
+        force_halo_y[i] = forcehalo * (yi * (sw2 + cw2 / at2) + xi * cw * sw * (1.0 - 1.0 / at2));
+    }
 }
 
 double computeRho(double Lf, double rr)
@@ -48,196 +87,249 @@ double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, d
     for (int iter = 0; iter < max_iter; ++iter) {
         double ff_rr = mass_difference(rr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
         double ff_rr1 = mass_difference(rr + drr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
-        double dff = (ff_rr1 - ff_rr) != 0 ? drr * ff_rr / (ff_rr1 - ff_rr) : 0; // Защита от деления на 0
+        double dff = drr * ff_rr / (ff_rr1 - ff_rr); // Защита от деления на 0
         rr -= dff;
-        if (std::abs(ff_rr) < tolerance && std::abs(dff) < tolerance) {
+        if (abs(ff_rr) < tolerance && abs(dff) < tolerance) {
             break;
         }
     }
     return rr;
 }
 
-void ComputeForces(const std::vector<Particle>& particles,
-    std::vector<double>& sum_rho,
-    std::vector<double>& sum_vx,
-    std::vector<double>& sum_vy,
-    std::vector<double>& sum_energy,
-    double radius_limit)
-{
+void ComputeForces(vector<Particle>& particles) {
     if (particles.empty()) return;
 
-    double max_h = 0.0;
-    for (const auto& p : particles) {
-        if (p.distanceFromCenter < radius_limit) {
-            max_h = max(max_h, p.smoothingLength);
+    size_t Np = particles.size();
+    Fu_p.assign(Np, 0.0);
+    Fv_p.assign(Np, 0.0);
+    Fe_p.assign(Np, 0.0);
+    Rhot.assign(Np, 0.0);
+    neighborCount.assign(Np, 0);
+
+    // Обновление hp_min
+    double hp_min = hp_max;
+    for (size_t i = 0; i < Np; ++i) {
+        if (ht_p[i] < hp_min) hp_min = ht_p[i];
+    }
+    h = hp_min;
+    h2 = 2.0 * h;
+
+    // Сортировка частиц по ячейкам
+    vector<vector<vector<int>>> box(Ngx, vector<vector<int>>(Ngy));
+    vector<vector<int>> Nbox(Ngx, vector<int>(Ngy, 0));
+    vector<vector<double>> hmaxbox(Ngx, vector<double>(Ngy, 0.0));
+    int Np_box_max = 0;
+
+    // Первый проход: определяем максимальное количество частиц в ячейке
+    for (size_t i = 0; i < Np; ++i) {
+        int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
+        int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
+        if (xbox >= 1 && xbox <= Ngx && ybox >= 1 && ybox <= Ngy) {
+            xbox--; ybox--;  // Корректируем индексацию (Fortran: 1..Ngx, C++: 0..Ngx-1)
+            Nbox[xbox][ybox]++;
+            if (Nbox[xbox][ybox] > Np_box_max) Np_box_max = Nbox[xbox][ybox];
         }
     }
 
-    double cell_size = 2.0 * max_h;
-    Grid grid(-radius, radius, -radius, radius, cell_size);
+    // Выделяем память под box
+    for (int x = 0; x < Ngx; ++x) {
+        for (int y = 0; y < Ngy; ++y) {
+            box[x][y].resize(Np_box_max, 0);
+        }
+    }
 
-    grid.build(particles);
-    for (size_t i = 0; i < particles.size(); ++i) {
-        const Particle& pi = particles[i];
-        //if (pi.distanceFromCenter >= radius_limit) continue;
+    // Второй проход: распределяем частицы по ячейкам
+    Nbox.assign(Ngx, vector<int>(Ngy, 0));
+    for (size_t i = 0; i < Np; ++i) {
+        int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
+        int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
+        if (xbox >= 1 && xbox <= Ngx && ybox >= 1 && ybox <= Ngy) {
+            xbox--; ybox--;
+            Nbox[xbox][ybox]++;
+            box[xbox][ybox][Nbox[xbox][ybox] - 1] = i;
+            if (ht_p[i] > hmaxbox[xbox][ybox]) hmaxbox[xbox][ybox] = ht_p[i];
+        }
+    }
 
-        std::vector<size_t> neighbor_indices = grid.getNeighbors(i, particles, 2 * pi.smoothingLength);
 
-        double sum_rho_i = 0.0;
-        double sum_vx_i = 0.0;
-        double sum_vy_i = 0.0;
-        double sum_energy_i = 0.0;
+    // Вычисление плотности (Rhot)
+    for (size_t i = 0; i < Np; ++i) {
+        int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
+        int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
+        if (xbox >= 1 && xbox <= Ngx && ybox >= 1 && ybox <= Ngy) {
 
-        for (size_t idx : neighbor_indices) {
-            const Particle& pj = particles[idx];
-            if (&pi == &pj) continue;
+            xbox--; ybox--;
+            double xi = particles[i].x;
+            double yi = particles[i].y;
+            double hpi = ht_p[i];
 
-            double h_avg = 0.5 * (pi.smoothingLength + pj.smoothingLength);
-            double dx = pi.x - pj.x;
-            double dy = pi.y - pj.y;
-            double velDiffX = pi.velocityX - pj.velocityX;
-            double velDiffY = pi.velocityY - pj.velocityY;
-            double r = sqrt(dx * dx + dy * dy);
-            if (!((r / h_avg <= 2.0) && (r / h_avg > 0.0))) {
-                continue;
+            int kbox = static_cast<int>(hmaxbox[xbox][ybox] / h + 1.0);
+
+            for (int ybox_1 = ybox - kbox; ybox_1 <= ybox + kbox; ++ybox_1) {
+                if (ybox_1 >= 0 && ybox_1 < Ngy) {
+                    for (int xbox_1 = xbox - kbox; xbox_1 <= xbox + kbox; ++xbox_1) {
+                        if (xbox_1 >= 0 && xbox_1 < Ngx) {
+                            for (int l = 0; l < Nbox[xbox_1][ybox_1]; ++l) {
+                                size_t j = box[xbox_1][ybox_1][l];
+                                if (j >= i) {
+                                    double s = sqrt(pow(xi - particles[j].x, 2) + pow(yi - particles[j].y, 2));
+                                    double hij = 0.5 * (hpi + ht_p[j]);
+                                    if (s <= 2.0 * hij) {
+                                        double mpW = particles[i].mass * W(s, hij);
+                                        Rhot[i] += mpW;
+                                        if (j != i) Rhot[j] += mpW;
+                                        neighborCount[i]++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
-            double dWx = dW(dx, h_avg, r);
-            double dWy = dW(dy, h_avg, r);
-            double dWxy = dWx * velDiffX + dWy * velDiffY;
-            sum_rho_i += pi.mass * dWxy;
-
-            double P_term = (pi.pressure / (pi.density * pi.density)) +
-                (pj.pressure / (pj.density * pj.density));
-            sum_vx_i += -pj.mass * P_term * dWx;
-            sum_vy_i += -pj.mass * P_term * dWy;
-
-            double visc = Viscosity(
-                pi.x, pi.y,
-                pj.x, pj.y,
-                pi.velocityX - pj.velocityX,
-                pi.velocityY - pj.velocityY,
-                h_avg,
-                pi.density, pj.density,
-                pi.pressure, pj.pressure,
-                r
-            );
-
-            sum_vx_i += -pj.mass * visc * dWx;
-            sum_vy_i += -pj.mass * visc * dWy;
-
-            sum_energy_i += 0.5 * pj.mass * (P_term + visc) * (
-                (pi.velocityX - pj.velocityX) * dWx +
-                (pi.velocityY - pj.velocityY) * dWy
-                );
         }
-
-        sum_rho[i] = sum_rho_i;
-        sum_vx[i] = sum_vx_i;
-        sum_vy[i] = sum_vy_i;
-        sum_energy[i] = sum_energy_i;
     }
+
+    for (size_t i = 0; i < Np; ++i) {
+        ht_p[i] = particles[i].smoothingLength * sqrt(Rho[i] / Rhot[i]);
+        if (ht_p[i] > hp_max) ht_p[i] = hp_max;
+    }
+
+    // Вычисление сил и временного шага
+    double dt_1 = 1.0;
+    double gamma1 = gamma - 1.0;
+
+    for (size_t i = 0; i < Np; ++i) {
+        int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
+        int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
+        maximum = 0.0;
+
+        if (xbox >= 1 && xbox <= Ngx && ybox >= 1 && ybox <= Ngy) {
+            xbox--; ybox--;
+            double xi = particles[i].x;
+            double yi = particles[i].y;
+            double ui = particles[i].velocityX;
+            double vi = particles[i].velocityY;
+            double Rhoi = Rhot[i];
+            double Ppi = gamma1 * Rhoi * particles[i].energy;
+            double hpi = ht_p[i];
+            int kbox = static_cast<int>(hmaxbox[xbox][ybox] / h + 1.0);
+
+            for (int ybox_1 = ybox - kbox; ybox_1 <= ybox + kbox; ++ybox_1) {
+                if (ybox_1 >= 0 && ybox_1 < Ngy) {
+                    for (int xbox_1 = xbox - kbox; xbox_1 <= xbox + kbox; ++xbox_1) {
+                        if (xbox_1 >= 0 && xbox_1 < Ngx) {
+                            for (int l = 0; l < Nbox[xbox_1][ybox_1]; ++l) {
+                                size_t j = box[xbox_1][ybox_1][l];
+                                if (j > i) {
+                                    double xj = particles[j].x;
+                                    double yj = particles[j].y;
+                                    double xij = xi - xj;
+                                    double yij = yi - yj;
+                                    double s = sqrt(xij * xij + yij * yij);
+                                    double hpj = ht_p[j];
+                                    double hij = 0.5 * (hpi + hpj);
+                                    if (s <= 2.0 * hij) {
+                                        double uj = particles[j].velocityX;
+                                        double vj = particles[j].velocityY;
+                                        double uij = ui - uj;
+                                        double vij = vi - vj;
+                                        double urdot = uij * xij + vij * yij;
+                                        double Rhoj = Rhot[j];
+                                        double Ppj = gamma1 * Rhoj * particles[j].energy;
+
+                                        double Rho_ij = 0.5 * (Rhoi + Rhoj);
+                                        double cij = 0.5 * (sqrt(gamma * Ppi / Rhoi) + sqrt(gamma * Ppj / Rhoj));
+                                        double mu_ij = mu(s, urdot, hij);
+                                        if (maximum < mu_ij) {
+                                            maximum = mu_ij;
+                                        }
+
+                                        double Aij = (beta * mu_ij - alpha * cij) * mu_ij / Rho_ij;
+                                        double Dij = Ppi / (Rhoi * Rhoi) + Ppj / (Rhoj * Rhoj) + Aij;
+                                        double dWx = gradW(s, xij, hij);  // Предполагается, что gradW определена
+                                        double dWy = gradW(s, yij, hij);
+                                        double dWxyuv = dWx * (ui - uj) + dWy * (vi - vj);
+
+                                        Fu_p[i] -= particles[i].mass * Dij * dWx;
+                                        Fv_p[i] -= particles[i].mass * Dij * dWy;
+                                        Fe_p[i] += 0.5 * particles[i].mass * Dij * dWxyuv;
+
+                                        Fu_p[j] += particles[i].mass * Dij * dWx;
+                                        Fv_p[j] += particles[i].mass * Dij * dWy;
+                                        Fe_p[j] += 0.5 * particles[i].mass * Dij * dWxyuv;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Временной шаг
+            double ci = sqrt(gamma * Ppi / Rhoi);
+            double a1 = hpi / (ci * (1.0 + 1.2 * alpha) + 1.2 * beta * maximum);
+            if (dt_1 > a1) dt_1 = a1;
+        }
+    }
+    dtn = dt_1;
 }
 
-void Predictor(double dt) {
-    for (int i = 0; i < numParticles; ++i) {
-        predictedParticles[i] = particles[i];
-
-        predictedParticles[i].velocityX += 0.5 * dt * sum_velocity_x[i];
-        predictedParticles[i].velocityY += 0.5 * dt * sum_velocity_y[i];
-
-
-        predictedParticles[i].x += predictedParticles[i].velocityX * dt;
-        predictedParticles[i].y += predictedParticles[i].velocityY * dt;
-
-        predictedParticles[i].density += sum_rho[i] * dt;
-        predictedParticles[i].pressure = (gamma - 1.0) *
-            predictedParticles[i].energy * predictedParticles[i].density;
-    }
-}
-
-// Корректор (окончательное интегрирование)
-void Korrector(double dt) {
-    for (int i = 0; i < numParticles; ++i) {
-        particles[i].velocityX += sum_velocity_x[i] * dt;
-        particles[i].velocityY += sum_velocity_y[i] * dt;
-
-        particles[i].x = predictedParticles[i].x +
-            0.5 * dt * (particles[i].velocityX + predictedParticles[i].velocityX);
-        particles[i].y = predictedParticles[i].y +
-            0.5 * dt * (particles[i].velocityY + predictedParticles[i].velocityY);
-
-        particles[i].density = predictedParticles[i].density + sum_rho[i] * dt;
-        particles[i].pressure = (gamma - 1.0) * particles[i].energy * particles[i].density;
-    }
-}
-
-double dW(double r_ij, double h, double r) {
-    const double sigma = 15.0 / (7.0 * M_PI * h * h * h);
-    double q = r / h;
-    double z = 0.0;
+// Реализация функций
+double W(double s, double hij) {
+    double q = s / hij;
+    double result;
 
     if (q <= 1.0) {
-        z = (-3.0 + 2.25 * q) * q;
+        result = 1.0 + (0.75 * q - 1.5) * q * q;
     }
-    else if (q <= 2.0) {
-        z = -0.75 * pow(2.0 - q, 2);
+    else if (q <= 2.0 && q > 1.0) {
+        result = 0.25 * pow(2.0 - q, 3);
+    }
+    else {
+        result = 0.0;
     }
 
-    return z * sigma * r_ij / r;
+    const double A_W = 10.0 / (7.0 * M_PI);
+    result = A_W * result / (hij * hij);
+
+    return result;
 }
 
-double Viscosity (
-    double x_i, double y_i,
-    double x_j, double y_j,
-    double velocity_ij_x, double velocity_ij_y,
-    double h_ij,
-    double rho_i, double rho_j,
-    double pressure_i, double pressure_j,
-    double r_ij
-) {
-    double c_i = SoundSpeed(pressure_i, rho_i);
-    double c_j = SoundSpeed(pressure_j, rho_j);
-    double rho_ij = (rho_i + rho_j) * 0.5;
-    double c_ij = SoundSpeed(pressure_i, rho_i) + SoundSpeed(pressure_j, rho_j) * 0.5;
-    double x_ij = x_i - x_j;
-    double y_ij = y_i - y_j;
-    double r = sqrt(x_ij * x_ij + y_ij * y_ij);
-    double mu = (h_ij * (velocity_ij_x * x_ij + velocity_ij_y * y_ij)) / (r * r + eps * eps * h_ij * h_ij);
+double gradW(double s, double rij, double hij) {
+    double q = s / hij;
+    double q1 = 2.0 - q;
+    double result;
 
-    double result = 0.0;
-    if ((velocity_ij_x * x_ij + velocity_ij_y * y_ij) < 0.0) {
-        result = (-mu * alpha * c_ij + beta * mu * mu) / rho_ij;
+    if (q <= 1.0) {
+        result = (-3.0 + 2.25 * q) * q;
     }
-    if (mu >= maximum) {
-        maximum = mu;
+    else if (q <= 2.0 && q > 1.0) {
+        result = -0.75 * q1 * q1;
     }
+    else {
+        result = 0.0;
+    }
+
+    const double A_W = 10.0 / (7.0 * M_PI);
+    result = A_W * result * (rij / s) / (hij * hij * hij);
+
     return result;
+}
+
+double mu(double s, double urdot, double hij) {
+    double q = s / hij;
+    double result;
+    if (urdot < 0.0) {
+        double denominator = hij * (q * q + eps * eps);
+
+        return result = urdot / denominator;
+    }
+    return result = 0.0;
 }
 
 double SoundSpeed(double p_i, double rho_i)
 {
     return sqrt(gamma * p_i / rho_i);
-}
-
-void dt()
-{
-    double dt_cv, dt_f, dt;
-
-    for (int i = 0; i < numParticles; i++)
-    {
-        if (particles[i].distanceFromCenter > radius)
-        {
-            continue;
-        }
-
-        double C = SoundSpeed(particles[i].pressure, particles[i].density);
-        double velocity_magnitude = sqrt(particles[i].velocityX * particles[i].velocityX + particles[i].velocityY * particles[i].velocityY);
-
-        dt_cv = 0.2 * particles[i].smoothingLength / (C + 0.6 * (alpha * C + beta * maximum));
-        dt_f = 0.2 * sqrt(particles[i].smoothingLength / velocity_magnitude);
-        dt = min(dt_cv, dt_f);
-        tau = min(tau, dt);
-    }
 }
 
 inline double particleDistance(const Particle& a, const Particle& b, double softening = 1e-4) {
@@ -247,7 +339,7 @@ inline double particleDistance(const Particle& a, const Particle& b, double soft
 }
 
 // Вычисление полной энергии системы
-double computeTotalEnergy(const std::vector<Particle>& particles, double G, double softening = 1e-4) {
+double computeTotalEnergy(const vector<Particle>& particles, double G, double softening = 1e-4) {
     double totalEnergy = 0.0;
     const size_t n = particles.size();
 
@@ -272,8 +364,8 @@ double computeTotalEnergy(const std::vector<Particle>& particles, double G, doub
 
 // Проверка сохранения энергии
 void checkEnergyConservation(
-    std::vector<Particle>& particlesBefore,
-    std::vector<Particle>& particlesAfter,
+    vector<Particle>& particlesBefore,
+    vector<Particle>& particlesAfter,
     double G,
     double tolerance = 1e-3,
     double softening = 1e-4
@@ -283,11 +375,11 @@ void checkEnergyConservation(
     const double abs_diff = abs(energyAfter - energyBefore);
     const double rel_diff = abs_diff / max(abs(energyBefore), abs(energyAfter));
 
-    std::cout << "\n=== Energy Conservation Check ==="
+    cout << "\n=== Energy Conservation Check ==="
         << "\nInitial energy: " << energyBefore
         << "\nFinal energy:   " << energyAfter
         << "\nAbsolute difference: " << abs_diff
         << "\nRelative difference: " << rel_diff * 100 << "%"
         << "\nTolerance: " << tolerance * 100 << "%"
-        << std::endl;
+        << endl;
 }

@@ -140,6 +140,15 @@ int configuration()
         std::getline(iss, value, ',');
         y_ex = std::stod(value);
 
+        std::getline(iss, value, ',');
+        Omega_h = std::stod(value);
+
+        std::getline(iss, value, ',');
+        a_h = std::stod(value);
+
+        std::getline(iss, value, ',');
+        tau_h = std::stod(value);
+
         std::cout << "Variables value:" << std::endl;
         std::cout << "numParticles = " << numParticles << std::endl;
         std::cout << "radius = " << radius << std::endl;
@@ -167,6 +176,9 @@ int configuration()
         std::cout << "x_ex = " << x_ex << std::endl;
         std::cout << "y_in = " << y_in << std::endl;
         std::cout << "y_ex = " << y_ex << std::endl;
+        std::cout << "Omega_h = " << Omega_h << std::endl;
+        std::cout << "a_h = " << a_h << std::endl;
+        std::cout << "tau_h = " << tau_h << std::endl;
     }
     else
     {

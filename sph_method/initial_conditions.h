@@ -11,13 +11,12 @@ void initializeGasCloud() {
     double pi_2 = 2.0 * M_PI;
 
     double RCORE1 = rmax_hl / r_core;
-    double A_G = AMS / (RCORE1 - atan(RCORE1));
+    A_G = AMS / (RCORE1 - atan(RCORE1));
     B_rho = system_Mass / fun_mass(0.0, scale_radius, 1000, pi_2, scale_halo);
     double rd_mah = 2.0;
     double B_p = B_rho / gamma * rd_mah * rd_mah * A_G / (Mah_d * Mah_d);
     A = 4.0 * M_PI * G * B_rho * scale_halo * scale_halo;
-
-    // Инициализация первого кольца
+    double gamma1 = gamma - 1.0;
     N_fi[1] = 0;
     Nk_fi[1] = 0;
 
@@ -63,88 +62,120 @@ void initializeGasCloud() {
         N_fi[k + 1] = N_fi[k] + Nk_fi[k + 1];
         k++;
     }
+    int Np = N_fi[k];
+    int Nk = k;
+    std::cout << "Np = " << Np << "\n";
+    std::cout << "k_max = " << Nk << "\n";
+    std::cout << "rk_max = " << rk[Nk] << "\n";
+    particles.resize(Np);
+    std::vector<double> h_p(Np);
 
-    // Размещение частиц в кольцах
-    particles.clear();
+    hp_max = Lh * (rk[Nk] - rk[Nk - 1]);
+    double hp_min = hp_max;
+    double Bh = (2.0 * Nk - 0.5 * (Nk - 5)) / 5.0;
+    double Ah = (0.5 - Bh) / Nk;
+
     int particleIndex = 0;
-
-    for (int ringIdx = 2; ringIdx < k; ++ringIdx) {
+    for (int ringIdx = 2; ringIdx <= Nk; ++ringIdx) {
         double r_min = rk[ringIdx - 1];
         double r_max = rk[ringIdx];
         double r_avg = (r_min + r_max) / 2.0;
         int numParticlesInRing = Nk_fi[ringIdx];
         double phi_step = pi_2 / numParticlesInRing;
 
-        for (int j = 0; j < numParticlesInRing; ++j) {
-            if (particleIndex >= numParticles) break;
-
-            double phi = j * phi_step;
+        for (int j = 0; j < numParticlesInRing && particleIndex < Np; ++j) {
+            double phi = (j - 1 - N_fi[ringIdx]) * phi_step;
             double x = r_avg * cos(phi);
             double y = r_avg * sin(phi);
             double distance = sqrt(x * x + y * y);
 
-            // Вычисление плотности и давления
+            h_p[particleIndex] = Lh * (r_max - r_min);
+            if (h_p[particleIndex] > hp_max) h_p[particleIndex] = hp_max;
+            if (h_p[particleIndex] < hp_min) hp_min = h_p[particleIndex];
+
             double density = B_rho * computeRho(scale_halo, distance);
             double pressure_local = B_p * pow(density / B_rho, gamma);
+            double energy = Ap * pow(density, gamma1) / gamma1;
 
-            // Создание частицы
-            Particle p;
-            p.x = x;
-            p.y = y;
-            p.distanceFromCenter = distance;
-            p.density = density;
-            p.mass = particleMass;
-            p.smoothingLength = 0.04;
-            p.pressure = pressure_local;
-            p.energy = Ap * pow(density, gamma - 1.0) / (gamma - 1.0);
-            p.velocityX = 0.0;
-            p.velocityY = 0.0;
-            particles.push_back(p);
-            ++particleIndex;
+            particles[particleIndex].density = B_rho * computeRho(scale_halo, distance);
+            particles[particleIndex].pressure = B_p * pow(particles[particleIndex].density / B_rho, gamma);
+            particles[particleIndex].energy = Ap * pow(particles[particleIndex].density, gamma1) / gamma1;
+            particles[particleIndex].mass = particleMass;
+            particles[particleIndex].smoothingLength = h_p[particleIndex];
+            particles[particleIndex].velocityX = 0.0;
+            particles[particleIndex].velocityY = 0.0;
+            particles[particleIndex].neighbors = 0;
+            particles[particleIndex].x = x;
+            particles[particleIndex].y = y;
+
+            particleIndex++;
         }
     }
-    std::cout << particleIndex << std::endl;
-    particles.resize(particleIndex);
-    predictedParticles.resize(particleIndex);
-    neighborCount.resize(particleIndex);
-    sum_rho.resize(particleIndex);
-    sum_energy.resize(particleIndex);
-    sum_velocity_x.resize(particleIndex);
-    sum_velocity_y.resize(particleIndex);
-    sum_smoothingLength.resize(particleIndex);
-    force_halo_x.resize(particleIndex);
-    force_halo_y.resize(particleIndex);
-    initialParticles.resize(particleIndex);
-    numParticles = particleIndex;
 
+    h = hp_min;
+    h2 = 2.0 * h;
 
-    // Поиск максимального x
+    Ngx = static_cast<int>((x_ex - x_in) / h2 + 0.5);
+    Ngy = static_cast<int>((y_ex - y_in) / h2 + 0.5);
+
+    std::cout << "Ngx = " << Ngx << ", Ngy = " << Ngy << "\n";
+
+    std::cout << Np << std::endl;
+    particles.resize(Np);
+    predictedParticles.resize(Np);
+    neighborCount.resize(Np);      // Оставляем, если нужно считать соседей
+    Rho.resize(Np);                // Начальная плотность
+    Rhot.resize(Np);               // Вычисляемая плотность
+    Fu_p.resize(Np);               // Сила по X
+    Fv_p.resize(Np);               // Сила по Y
+    Fe_p.resize(Np);               // Изменение энергии
+    ht_p.resize(Np);               // Обновляемая сглаживающая длина
+    force_halo_x.resize(Np);       // Сила от гало по X (опционально)
+    force_halo_y.resize(Np);       // Сила от гало по Y (опционально)
+    initialParticles.resize(Np);
+    numParticles = Np;
+
+    int i = 0;
     for (const auto& p : particles) {
-        if (p.x > max_x) {
-            max_x = p.x;
-        }
+        max_x = max(p.x, max_x);
+        ht_p[i] = particles[i].smoothingLength;
+        Rho[i] = particles[i].smoothingLength;
+        i++;
     }
     std::cout << "Max X: " << max_x << std::endl;
+    
+    // Вычисляем гидродинамические силы
+    ComputeForces(particles);
 
-    // Вычисление сил
-    ComputeForces(particles, sum_rho, sum_velocity_x, sum_velocity_y, sum_energy, radius);
-    int i = 0;
-    // Установка вращательных скоростей
+    // Вычисляем гравитационные силы гало
+    computeForcesGravCool(particles, force_halo_x, force_halo_y);
+
+    i = 0;
     for (auto& p : particles) {
         double x = p.x;
         double y = p.y;
-        double distance = sqrt(x * x + y * y);
-        double ff = atan2(y, x);
+        double distance = std::hypot(x, y);  // Используем hypot для большей точности
+        double ff = std::atan2(y, x);
 
-        double ksi = computeKsiForHalo(x, y, 0.0);
-        double force_halo_x = computeForceGrav(ksi, x, A, a_halo);
-        double force_halo_y = computeForceGrav(ksi, y, A, b_halo);
-        double F_r = (force_halo_x * x + force_halo_y * y) / distance;
-        double Fuv_r = (sum_velocity_x[i] * x + sum_velocity_y[i] * y) / distance;
+        // Радиальная составляющая гравитационной силы
+        double F_r = (force_halo_x[i] * x + force_halo_y[i] * y) / distance;
 
-        double v_rot = sqrt(distance * (F_r + Fuv_r));
-        p.velocityX = -v_rot * sin(ff);
-        p.velocityY = v_rot * cos(ff);
+        // Радиальная составляющая гидродинамической силы
+        double Fuv_r = (Fu_p[i] * x + Fv_p[i] * y) / distance;
+
+        // Скорость вращения
+        double v_rot = 0.0;
+        double Fr_total = F_r + Fuv_r;
+        v_rot = std::sqrt(-distance * Fr_total);
+
+        // Задаём скорости
+        p.velocityX = -v_rot * std::sin(ff);
+        p.velocityY = v_rot * std::cos(ff);
+
+        // Давление (если нужно для вывода или дальнейших расчётов)
+        double Ppi = (gamma - 1.0) * Rho[i] * p.energy;
+
         i++;
     }
+    ComputeForces(particles);
 }
