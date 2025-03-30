@@ -42,11 +42,11 @@ def process_single_file(args):
     
     x_coords = [p['x'] for p in particles]
     y_coords = [p['y'] for p in particles]
-    # Вычисление минимальных и максимальных значений
     
+    # Давление
     pressure_values = [p['pressure'] for p in particles]
     sc1 = axes[0].scatter(x_coords, y_coords, c=pressure_values, cmap='magma', s=size_scat, edgecolors="none")
-    axes[0].set_title("Давление p", fontsize=20, pad=20)
+    axes[0].set_title(f"Давление p (t = {times:.2f})", fontsize=20, pad=20)
     axes[0].tick_params(axis='both', labelsize=24)
     axes[0].set_xlabel("x", fontsize=24, labelpad=10)
     axes[0].set_ylabel("y", fontsize=24, labelpad=10)
@@ -57,9 +57,10 @@ def process_single_file(args):
     cbar1 = plt.colorbar(sc1, cax=cax1)
     cbar1.ax.tick_params(labelsize=16)
 
+    # Плотность
     density_values = [p['density'] for p in particles]
     sc2 = axes[1].scatter(x_coords, y_coords, c=density_values, cmap='viridis', s=size_scat, edgecolors="none")
-    axes[1].set_title(r'Плотность $\rho$', fontsize=20, pad=20)
+    axes[1].set_title(f"Плотность $\\rho$ (t = {times:.2f})", fontsize=20, pad=20)
     axes[1].tick_params(axis='both', labelsize=24)
     axes[1].set_xlabel("x", fontsize=24, labelpad=10)
     axes[1].set_ylabel("y", fontsize=24, labelpad=10)
@@ -70,22 +71,7 @@ def process_single_file(args):
     cbar2 = plt.colorbar(sc2, cax=cax2)
     cbar2.ax.tick_params(labelsize=16)
     
-    sample_particles = np.random.choice(particles, size=max(1, len(particles) // 10000), replace=False)
-    for p in sample_particles:
-        velocity_magnitude = np.hypot(p['velocityX'], p['velocityY'])
-        if velocity_magnitude > 0:
-            velocityX_normalized = p['velocityX'] / velocity_magnitude
-            velocityY_normalized = p['velocityY'] / velocity_magnitude
-        else:
-            velocityX_normalized = 0
-            velocityY_normalized = 0
-        
-        axes[1].quiver(p['x'], p['y'], 
-                      velocityX_normalized * 0.1, 
-                      velocityY_normalized * 0.1, 
-                      angles='xy', scale_units='xy', scale=1, 
-                      color='r', width=0.003)
-    
+    # Сохранение графика
     output_file = os.path.join(output_folder, f"{os.path.basename(file_path).split('.')[0]}.jpeg")
     plt.tight_layout()
     plt.savefig(output_file, dpi=96, bbox_inches='tight', pad_inches=0.1)
@@ -96,7 +82,7 @@ def process_files_parallel(input_folder, output_folder, size_scat):
     os.makedirs(output_folder, exist_ok=True)
     
     bin_files = [f for f in os.listdir(input_folder) if f.endswith('.bin')]
-    bin_files.sort(key=lambda x: int(x.split('.')[0]))
+    bin_files.sort(key=lambda x: float(x.split('.')[0]))  # Сортировка по имени файла (предполагается, что имя — это время)
     
     with Pool(processes=cpu_count()) as pool:
         args_list = [
@@ -107,7 +93,8 @@ def process_files_parallel(input_folder, output_folder, size_scat):
 
 if __name__ == '__main__':
     input_folder = r'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/data'
-    output_folder = r'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/Визуализация/Images'
+    output_folder = r'C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_method/Визуализация/Images/Clouds'
     size_scat = 3
 
     process_files_parallel(input_folder, output_folder, size_scat)
+    print(f"Visualization completed. Plots saved in {output_folder}")

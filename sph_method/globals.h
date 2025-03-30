@@ -15,8 +15,7 @@
 #include <mutex>
 #include <unordered_map>
 #include <functional>
-
-
+using namespace std;
 std::mutex logMutex;
 
 const double M_PI = 3.14159265358979323846;
@@ -35,9 +34,6 @@ double t;
 double Dt;
 double system_Mass;
 double scale;
-double a_halo;
-double b_halo;
-double c_halo;
 double scale_halo;
 double shag_dt = 0.01;
 double dt_out = 100;
@@ -61,6 +57,7 @@ double Omega_h;
 double a_h;
 double A_G;
 double tau_h;
+double initial_energy;
 
 struct Particle {
     double x = 0.0;
@@ -98,8 +95,6 @@ void saveParticlesToFile(double times, double Dt);
 void initializeGasCloud();
 void SPH();
 int configuration();
-double computeKsiForHalo(double x, double y, double z);
-double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ);
 double computeRho(double dist, double rad);
 double dComputeRho(double dist, double rad);
 double fun_mass(double r1, double r2, int Nmm, double pi2, double Lf);
@@ -114,3 +109,5 @@ void logVariable(const T& var);
 template <typename T>
 void logVariable(const std::vector<T>& vec);
 void computeForcesGravCool(std::vector<Particle>& particles, std::vector<double>& force_halo_x, std::vector<double>& force_halo_y);
+void law_cons(double& Energy, const std::vector<Particle>& parts);
+void save_laws_cons(double t, double& next_print_time, double initial_energy, vector<Particle>& particles);

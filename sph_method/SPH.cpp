@@ -4,13 +4,13 @@
 
 int main()
 {
+    initial_energy = 0.0;
     int checkConfiguration = configuration();
     if (checkConfiguration != 0)
     {
         particles.resize(numParticles);
         predictedParticles.resize(numParticles);
-
-        neighborCount.resize(numParticles);  // Оставляем, если считаем соседей
+        neighborCount.resize(numParticles);
         Rho.resize(numParticles);            // Начальная плотность
         Rhot.resize(numParticles);           // Вычисляемая плотность
         Fu_p.resize(numParticles);           // Сила по X
@@ -19,37 +19,36 @@ int main()
         ht_p.resize(numParticles);           // Обновляемая сглаживающая длина
         force_halo_x.resize(numParticles);   // Сила от гало по X
         force_halo_y.resize(numParticles);   // Сила от гало по Y
-        initialParticles.resize(numParticles);
     }
 
-    std::string path = "";
+    string path = "";
     int choice;
     while (true)
     {
-        std::cout << "\n1 - start the program with initialization of new values\n2 - launch the program with initialization of values from the file\n";
-        std::cin >> choice;
+        cout << "\n1 - start the program with initialization of new values\n2 - launch the program with initialization of values from the file\n";
+        cin >> choice;
         switch (choice)
         {
         case 1:
             system("CLS");
             initializeGasCloud();
             saveParticlesToFile(t, Dt);
-            std::cout << Dt << std::endl;
-            initialParticles = particles;
-            //checkEnergyConservation(initialParticles, particles, G);
+            cout << Dt << endl;
+            law_cons(initial_energy, particles);
+            cout << "Initial Energy: " << initial_energy << endl;
             SPH();
             return 0;
         case 2:
             system("CLS");
-            std::cout << "\nEnter the folder and the file name\n";
-            std::cin >> path;
+            cout << "\nEnter the folder and the file name\n";
+            cin >> path;
             path = "data\\" + path;
             //FillParticles(path);
             //SPH();
             return 0;
         default:
             system("CLS");
-            std::cout << "Something went wrong.";
+            cout << "Something went wrong.";
             return 0;
         }
     }
@@ -57,12 +56,12 @@ int main()
 }
 
 void SPH() {
-    std::vector<double> Fu_p_old(numParticles);
-    std::vector<double> Fv_p_old(numParticles);
-    std::vector<double> Fe_p_old(numParticles);
+    vector<double> Fu_p_old(numParticles);
+    vector<double> Fv_p_old(numParticles);
+    vector<double> Fe_p_old(numParticles);
     double dt_x = 1000, dt_y = 1000;
     int check_print = 0;
-
+    double next_print_time = 0.0;
     tau = 1e-3;
 
     while (t <= t_end) {
@@ -104,7 +103,7 @@ void SPH() {
             ri = sqrt(xi* xi + yi * yi);
             cxy = xi / ri;
             sxy = yi / ri;
-            double fi = std::atan2(yi, xi);
+            double fi = atan2(yi, xi);
             Vx = particles[i].velocityX;
             Vy = particles[i].velocityY;
             double Vr = Vx * cxy + Vy * sxy;
@@ -117,8 +116,8 @@ void SPH() {
             double Lrv_t = Lrv + dt05 * Ffi;
             double Vfi_t = Lrv_t / ri_t;
             double fi_t = fi + dt05 * (Vfi / ri + Vfi_t / ri_t);
-            double cfi = std::cos(fi_t);
-            double sfi = std::sin(fi_t);
+            double cfi = cos(fi_t);
+            double sfi = sin(fi_t);
 
             // Обновляем предсказанные значения
             predictedParticles[i].x = ri_t * cfi;
@@ -159,7 +158,7 @@ void SPH() {
             ri = sqrt(xi * xi + yi * yi);
             cxy = xi / ri;
             sxy = yi / ri;
-            double fi = std::atan2(yi, xi);
+            double fi = atan2(yi, xi);
             Vx = particles[i].velocityX;
             Vy = particles[i].velocityY;
             double Vr = Vx * cxy + Vy * sxy;
@@ -175,8 +174,8 @@ void SPH() {
             double Lrv_t = 2.0 * Lrv_tt - Lrv;
             double Vfi_t = Lrv_t / ri_t;
             double fi_t = fi + tau * Lrv_tt / (ri_tt * ri_tt);
-            double cfi = std::cos(fi_t);
-            double sfi = std::sin(fi_t);
+            double cfi = cos(fi_t);
+            double sfi = sin(fi_t);
 
             // Обновляем значения
             particles[i].x = ri_t * cfi;
@@ -189,8 +188,8 @@ void SPH() {
 
             // Обновление временного шага (как в Fortran)
             double hpi = ht_p[i];
-            double ax = std::sqrt(hpi / std::abs(Fx));
-            double ay = std::sqrt(hpi / std::abs(Fy));
+            double ax = sqrt(hpi / abs(Fx));
+            double ay = sqrt(hpi / abs(Fy));
             if (dt_x > ax) dt_x = ax;
             if (dt_y > ay) dt_y = ay;
         }
@@ -199,7 +198,9 @@ void SPH() {
 
         // Шаг 5: Обновление времени и вывод
         t += tau;
-        std::cout << "Time: " << t << " | dt: " << tau << std::endl;
+        cout << "Time: " << t << " | dt: " << tau << endl;
+
+        save_laws_cons(t, next_print_time, initial_energy, particles);
 
         if (t >= Dt) {
             if (check_print == 0) {
@@ -208,7 +209,7 @@ void SPH() {
             else {
                 saveParticlesToFile(t, Dt);
             }
-            std::cout << t << " DT: " << Dt << std::endl;
+            cout << t << " DT: " << Dt << endl;
             Dt += shag_dt;
         }
     }

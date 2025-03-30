@@ -1,23 +1,13 @@
 ﻿#pragma once
 #include "globals.h"
 #include "grid.h"
-using namespace::std;
-double computeKsiForHalo(double x, double y, double z)
-{
-    return sqrt((x / a_halo) * (x / a_halo) + (y / b_halo) * (y / b_halo) + (z / c_halo) * (z / c_halo));
-}
-
-double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ) {
-    return -A * (1.0 / ksi - 1.0 / (ksi * ksi) * atan(ksi)) * (koord / (ksi * halo_OXYZ));
-}
-
+using namespace std;
 void computeForcesGravCool(vector<Particle>& particles, vector<double>& force_halo_x, vector<double>& force_halo_y) {
     for (size_t i = 0; i < particles.size(); ++i) {
         double xi = particles[i].x;
         double yi = particles[i].y;
         double ri = hypot(xi, yi);
 
-        // Временная эволюция at
         double at;
         if (t <= tau_h) {
             at = 1.0 - (1.0 - a_h) * t / tau_h;
@@ -32,18 +22,15 @@ void computeForcesGravCool(vector<Particle>& particles, vector<double>& force_ha
         double cw2 = cw * cw;
         double sw2 = sw * sw;
 
-        // Вычисление ksi
         double ksi = sqrt(
             xi * xi * (cw2 + sw2 / at2) +
             yi * yi * (sw2 + cw2 / at2) +
             2.0 * xi * yi * cw * sw * (1.0 - 1.0 / at2)
         );
 
-        // Вычисление силы гало
         double ksicore = ksi / r_core;
         double forcehalo = -A_G * (ksicore - atan(ksicore)) / (ksi * ksi * ksi);
 
-        // Компоненты силы
         force_halo_x[i] = forcehalo * (xi * (cw2 + sw2 / at2) + yi * cw * sw * (1.0 - 1.0 / at2));
         force_halo_y[i] = forcehalo * (yi * (sw2 + cw2 / at2) + xi * cw * sw * (1.0 - 1.0 / at2));
     }
@@ -125,7 +112,7 @@ void ComputeForces(vector<Particle>& particles) {
         int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
         int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
         if (xbox >= 1 && xbox <= Ngx && ybox >= 1 && ybox <= Ngy) {
-            xbox--; ybox--;  // Корректируем индексацию (Fortran: 1..Ngx, C++: 0..Ngx-1)
+            xbox--; ybox--;
             Nbox[xbox][ybox]++;
             if (Nbox[xbox][ybox] > Np_box_max) Np_box_max = Nbox[xbox][ybox];
         }
@@ -246,7 +233,7 @@ void ComputeForces(vector<Particle>& particles) {
 
                                         double Aij = (beta * mu_ij - alpha * cij) * mu_ij / Rho_ij;
                                         double Dij = Ppi / (Rhoi * Rhoi) + Ppj / (Rhoj * Rhoj) + Aij;
-                                        double dWx = gradW(s, xij, hij);  // Предполагается, что gradW определена
+                                        double dWx = gradW(s, xij, hij);
                                         double dWy = gradW(s, yij, hij);
                                         double dWxyuv = dWx * (ui - uj) + dWy * (vi - vj);
 
@@ -274,7 +261,6 @@ void ComputeForces(vector<Particle>& particles) {
     dtn = dt_1;
 }
 
-// Реализация функций
 double W(double s, double hij) {
     double q = s / hij;
     double result;
@@ -338,48 +324,16 @@ inline double particleDistance(const Particle& a, const Particle& b, double soft
     return sqrt(dx * dx + dy * dy + softening * softening);
 }
 
-// Вычисление полной энергии системы
-double computeTotalEnergy(const vector<Particle>& particles, double G, double softening = 1e-4) {
-    double totalEnergy = 0.0;
-    const size_t n = particles.size();
+void law_cons(double& Energy, const std::vector<Particle>& parts) {
+    double Psi;
+    Energy = 0.0;
 
-   #pragma omp parallel for reduction(+:totalEnergy)
-    for (size_t i = 0; i < n; ++i) {
-        const Particle& p = particles[i];
-        const double v_sq = p.velocityX * p.velocityX + p.velocityY * p.velocityY;
-        totalEnergy += p.mass * (0.5 * v_sq + p.energy);    }
-
-   #pragma omp parallel for reduction(-:totalEnergy)
-    for (size_t i = 0; i < n; ++i) {
-        const Particle& pi = particles[i];
-        for (size_t j = i + 1; j < n; ++j) {
-            const Particle& pj = particles[j];
-            const double r = particleDistance(pi, pj, softening);
-            totalEnergy -= G * pi.mass * pj.mass / r;
-        }
+    for (int i = 0; i < numParticles; ++i) {
+        Psi = -1000.0 + 0.5 * A_G * (pow(parts[i].x, 2) + pow(parts[i].y, 2));
+        Energy +=
+            parts[i].mass * 0.5 * (pow(parts[i].velocityX, 2)
+            + pow(parts[i].velocityY, 2))
+            + parts[i].mass * parts[i].energy
+            + Psi * parts[i].mass;
     }
-
-    return totalEnergy;
-}
-
-// Проверка сохранения энергии
-void checkEnergyConservation(
-    vector<Particle>& particlesBefore,
-    vector<Particle>& particlesAfter,
-    double G,
-    double tolerance = 1e-3,
-    double softening = 1e-4
-) {
-    const double energyBefore = computeTotalEnergy(particlesBefore, G, softening);
-    const double energyAfter = computeTotalEnergy(particlesAfter, G, softening);
-    const double abs_diff = abs(energyAfter - energyBefore);
-    const double rel_diff = abs_diff / max(abs(energyBefore), abs(energyAfter));
-
-    cout << "\n=== Energy Conservation Check ==="
-        << "\nInitial energy: " << energyBefore
-        << "\nFinal energy:   " << energyAfter
-        << "\nAbsolute difference: " << abs_diff
-        << "\nRelative difference: " << rel_diff * 100 << "%"
-        << "\nTolerance: " << tolerance * 100 << "%"
-        << endl;
 }
