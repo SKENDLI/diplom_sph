@@ -56,21 +56,51 @@ def visualize_particle_data(particles, x_key, y_key):
 
 def visualize_velocity_by_radius(particles):
     """
-    Визуализирует зависимость скорости от радиуса.
+    Визуализирует зависимость скорости от радиуса с усреднением (только положительные радиусы).
     
     :param particles: Список данных частиц
     """
+    # Извлечём радиусы и скорости
     radius_data = [particle["radius"] for particle in particles]
     velocity_data = [particle["velocity"] for particle in particles]
-    
+
+    # Уберём выбросы (например, скорости > 10 или радиусы < 0)
+    filtered_data = [(r, v) for r, v in zip(radius_data, velocity_data) if r >= 0 and v < 10]
+    if not filtered_data:
+        print("Нет данных для визуализации после фильтрации!")
+        return
+    radius_data, velocity_data = zip(*filtered_data)
+
+    # Усреднение скорости по радиусам
+    # Создаём словарь для группировки
+    radius_velocity_dict = {}
+    for r, v in zip(radius_data, velocity_data):
+        # Округляем радиус до 2 знаков для группировки
+        r_rounded = round(r, 2)
+        if r_rounded not in radius_velocity_dict:
+            radius_velocity_dict[r_rounded] = []
+        radius_velocity_dict[r_rounded].append(v)
+
+    # Вычисляем средние значения
+    avg_radius = []
+    avg_velocity = []
+    for r, velocities in sorted(radius_velocity_dict.items()):
+        avg_radius.append(r)
+        avg_velocity.append(np.mean(velocities))
+
+    # Оставляем только положительные радиусы (убираем симметрию)
+    x_data = avg_radius
+    y_data = avg_velocity
+
     plt.figure(figsize=(8, 6))
-    plt.scatter(radius_data, velocity_data, s=1, label='Скорость по радиусу', color='blue')
+    plt.plot(x_data, y_data, label='Скорость по радиусу', color='blue', linestyle='--')  # Используем plot для непрерывной линии
     plt.xlabel('Радиус', fontsize=14)
     plt.ylabel('Модуль скорости', fontsize=14)
     plt.title('Зависимость скорости от радиуса частиц', fontsize=16)
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
     plt.grid(True)
+    plt.legend()
     plt.show()
 
 # Прочитаем данные из файла
@@ -78,7 +108,7 @@ particles = read_particle_data("C:/Users/SKENDLI/Desktop/diplom/diplom_sph/sph_m
 
 # Выбор данных для построения графика
 x_column = "radius"  # Используем радиус как X
-y_column = "pressure"  # Можно выбрать любую характеристику, например, скорость по X
+y_column = "pressure"  # Можно выбрать любую характеристику, например, давление
 
 # Визуализируем выборочные данные
 visualize_particle_data(particles, x_column, y_column)

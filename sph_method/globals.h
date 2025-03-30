@@ -50,6 +50,17 @@ double A;
 double Ap;
 double Lh;
 double x_in, x_ex, y_in, y_ex;
+double hp_max;
+double h;
+double h2;
+int Ngx;
+int Ngy;
+double dtn;
+double courant = 0.2;
+double Omega_h;
+double a_h;
+double A_G;
+double tau_h;
 
 struct Particle {
     double x = 0.0;
@@ -69,24 +80,23 @@ std::vector<Particle> particles;
 std::vector<Particle> predictedParticles;
 std::vector<Particle> initialParticles;
 
-std::vector <int> neighborCount;
-std::vector <double> sum_rho;
-std::vector <double> sum_energy;
-std::vector <double> sum_velocity_x;
-std::vector <double> sum_velocity_y;
-std::vector <double> sum_smoothingLength;
-std::vector <double> force_halo_x;
-std::vector <double> force_halo_y;
+std::vector<int> neighborCount;         // Число соседей (опционально, если нужно)
+std::vector<double> Rho;                // Начальная плотность
+std::vector<double> Rhot;               // Вычисляемая плотность
+std::vector<double> Fu_p;               // Сила по X
+std::vector<double> Fv_p;               // Сила по Y
+std::vector<double> Fe_p;               // Изменение энергии
+std::vector<double> ht_p;               // Обновляемая сглаживающая длина
+std::vector<double> force_halo_x;       // Сила от гало по X (опционально)
+std::vector<double> force_halo_y;       // Сила от гало по Y (опционально)
 
 double max_x = -INFINITY;
 double max_y = -INFINITY;
+double check_max_mu = 9999999;
 
 void saveParticlesToFile(double times, double Dt);
 void initializeGasCloud();
-void Predictor(double dt);
-void Korrector(double dt);
 void SPH();
-void dt();
 int configuration();
 double computeKsiForHalo(double x, double y, double z);
 double computeForceGrav(double ksi, double koord, double A, double halo_OXYZ);
@@ -94,19 +104,13 @@ double computeRho(double dist, double rad);
 double dComputeRho(double dist, double rad);
 double fun_mass(double r1, double r2, int Nmm, double pi2, double Lf);
 double SoundSpeed(double pressure, double density);
-double Viscosity(
-    double x_i, double y_i,
-    double x_j, double y_j,
-    double velocity_ij_x, double velocity_ij_y,
-    double h_ij,
-    double rho_i, double rho_j,
-    double pressure_i, double pressure_j,
-    double r_ij
-);
-double dW(double r_ij, double h, double r);
+double W(double s, double hij);
+double gradW(double s, double rij, double hij);
+double mu(double s, double urdot, double hij);
 double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
 double mass_difference(double rr, double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
 template <typename T>
 void logVariable(const T& var);
 template <typename T>
 void logVariable(const std::vector<T>& vec);
+void computeForcesGravCool(std::vector<Particle>& particles, std::vector<double>& force_halo_x, std::vector<double>& force_halo_y);
