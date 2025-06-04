@@ -15,6 +15,8 @@
 #include <mutex>
 #include <unordered_map>
 #include <functional>
+#include <limits>
+
 using namespace std;
 std::mutex logMutex;
 
@@ -35,8 +37,8 @@ double Dt;
 double system_Mass;
 double scale;
 double scale_halo;
-double shag_dt = 0.01;
-double dt_out = 100;
+double shag_dt = 0.1;
+double dt_out = 10;
 double B_rho = 0.0;
 double Mah_d;
 double AMS;
@@ -77,15 +79,15 @@ std::vector<Particle> particles;
 std::vector<Particle> predictedParticles;
 std::vector<Particle> initialParticles;
 
-std::vector<int> neighborCount;         // Число соседей (опционально, если нужно)
-std::vector<double> Rho;                // Начальная плотность
-std::vector<double> Rhot;               // Вычисляемая плотность
-std::vector<double> Fu_p;               // Сила по X
-std::vector<double> Fv_p;               // Сила по Y
-std::vector<double> Fe_p;               // Изменение энергии
-std::vector<double> ht_p;               // Обновляемая сглаживающая длина
-std::vector<double> force_halo_x;       // Сила от гало по X (опционально)
-std::vector<double> force_halo_y;       // Сила от гало по Y (опционально)
+std::vector<int> neighborCount;
+std::vector<double> Rho;
+std::vector<double> Rhot;
+std::vector<double> Fu_p;
+std::vector<double> Fv_p;
+std::vector<double> Fe_p;
+std::vector<double> ht_p;
+std::vector<double> force_halo_x;
+std::vector<double> force_halo_y;
 
 double max_x = -INFINITY;
 double max_y = -INFINITY;

@@ -1,14 +1,16 @@
 ﻿#pragma once
-#pragma once
 void initializeGasCloud() {
-    std::vector<double> rk(1000, 0.0);  // Радиусы колец
-    std::vector<int> N_fi(1000, 0);     // Общее число частиц до данного кольца
-    std::vector<int> Nk_fi(1000, 0);    // Число частиц в текущем кольце
+    std::vector<double> rk(1000, 0.0);
+    std::vector<int> N_fi(1000, 0);
+    std::vector<int> Nk_fi(1000, 0);
     double particleMass = system_Mass / numParticles;
     double scale_radius = radius * scale;
-    double drr = 1e-5;
+    double drr = 1e-6;
     int Nm = 20;
     double pi_2 = 2.0 * M_PI;
+    double target_radius = 1.5;
+    double v_const = 0.0;
+    double min_radius_diff = INFINITY;
 
     double RCORE1 = rmax_hl / r_core;
     A_G = AMS / (RCORE1 - atan(RCORE1));
@@ -21,16 +23,16 @@ void initializeGasCloud() {
     Nk_fi[1] = 0;
 
     double rr = 0.01;
-    double ff_rr = B_rho * fun_mass(0.0, rr, Nm, pi_2, scale_halo) / particleMass - pi_2;
+    double ff_rr = B_rho * fun_mass(0.0, rr, Nm, pi_2, scale_halo) / particleMass - M_PI;
     double rr_1 = rr + drr;
-    double ff_rr1 = B_rho * fun_mass(0.0, rr_1, Nm, pi_2, scale_halo) / particleMass - pi_2;
+    double ff_rr1 = B_rho * fun_mass(0.0, rr_1, Nm, pi_2, scale_halo) / particleMass - M_PI;
     double dff = drr * ff_rr / (ff_rr1 - ff_rr);
 
     while (std::abs(ff_rr) > 1e-6 || std::abs(dff) > 1e-6) {
         rr -= dff;
         rr_1 = rr + drr;
-        ff_rr = B_rho * fun_mass(0.0, rr, Nm, pi_2, scale_halo) / particleMass - pi_2;
-        ff_rr1 = B_rho * fun_mass(0.0, rr_1, Nm, pi_2, scale_halo) / particleMass - pi_2;
+        ff_rr = B_rho * fun_mass(0.0, rr, Nm, pi_2, scale_halo) / particleMass - M_PI;
+        ff_rr1 = B_rho * fun_mass(0.0, rr_1, Nm, pi_2, scale_halo) / particleMass - M_PI;
         dff = drr * ff_rr / (ff_rr1 - ff_rr);
     }
 
@@ -123,15 +125,15 @@ void initializeGasCloud() {
     std::cout << Np << std::endl;
     particles.resize(Np);
     predictedParticles.resize(Np);
-    neighborCount.resize(Np);      // Оставляем, если нужно считать соседей
-    Rho.resize(Np);                // Начальная плотность
-    Rhot.resize(Np);               // Вычисляемая плотность
-    Fu_p.resize(Np);               // Сила по X
-    Fv_p.resize(Np);               // Сила по Y
-    Fe_p.resize(Np);               // Изменение энергии
-    ht_p.resize(Np);               // Обновляемая сглаживающая длина
-    force_halo_x.resize(Np);       // Сила от гало по X (опционально)
-    force_halo_y.resize(Np);       // Сила от гало по Y (опционально)
+    neighborCount.resize(Np);
+    Rho.resize(Np);
+    Rhot.resize(Np);
+    Fu_p.resize(Np);
+    Fv_p.resize(Np);
+    Fe_p.resize(Np);
+    ht_p.resize(Np);
+    force_halo_x.resize(Np);
+    force_halo_y.resize(Np);
     initialParticles.resize(Np);
     numParticles = Np;
 
@@ -143,36 +145,68 @@ void initializeGasCloud() {
         i++;
     }
     std::cout << "Max X: " << max_x << std::endl;
-    
-    // Вычисляем гидродинамические силы
+
     ComputeForces(particles);
 
-    // Вычисляем гравитационные силы гало
     computeForcesGravCool(particles, force_halo_x, force_halo_y);
-
     i = 0;
-    for (auto& p : particles) {
+    for (const auto& p : particles) {
         double x = p.x;
         double y = p.y;
-        double distance = std::hypot(x, y);  // Используем hypot для большей точности
+        double distance = std::hypot(x, y);
         double ff = std::atan2(y, x);
 
-        // Радиальная составляющая гравитационной силы
         double F_r = (force_halo_x[i] * x + force_halo_y[i] * y) / distance;
 
-        // Радиальная составляющая гидродинамической силы
         double Fuv_r = (Fu_p[i] * x + Fv_p[i] * y) / distance;
 
-        // Скорость вращения
         double v_rot = 0.0;
         double Fr_total = F_r + Fuv_r;
         v_rot = std::sqrt(-distance * Fr_total);
 
-        // Задаём скорости
+        double radius_diff = std::abs(distance - target_radius);
+        if (radius_diff < min_radius_diff) {
+            min_radius_diff = radius_diff;
+            v_const = v_rot;
+        }
+
+        i++;
+    }
+    std::cout << "Velocity on r = " << target_radius << ": " << v_const << std::endl;
+    i = 0;
+    for (auto& p : particles) {
+        double x = p.x;
+        double y = p.y;
+        double distance = std::hypot(x, y);
+        double ff = std::atan2(y, x);
+
+        double F_r = (force_halo_x[i] * x + force_halo_y[i] * y) / distance;
+
+        double Fuv_r = (Fu_p[i] * x + Fv_p[i] * y) / distance;
+
+        double v_rot = 0.0;
+        double Fr_total = F_r + Fuv_r;
+        if (-distance * Fr_total >= 0) {
+            v_rot = std::sqrt(-distance * Fr_total);
+        }
+        else {
+            v_rot = 0.0;
+        }
+        double r_threshold = 1.5;
+        if (distance >= r_threshold) {
+            v_rot = v_const;
+        }
+        if (std::isnan(v_rot)) {
+            v_rot = 0.0;
+        }
         p.velocityX = -v_rot * std::sin(ff);
         p.velocityY = v_rot * std::cos(ff);
 
-        // Давление (если нужно для вывода или дальнейших расчётов)
+        if (std::isnan(p.velocityX) || std::isnan(p.velocityY)) {
+            p.velocityX = 0.0;
+            p.velocityY = 0.0;
+        }
+
         double Ppi = (gamma - 1.0) * Rho[i] * p.energy;
 
         i++;

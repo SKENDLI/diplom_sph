@@ -8,11 +8,9 @@ void saveParticlesToFile(double times, double Dt)
         return;
     }
 
-    // Формирование имени файла
     wstring_convert<codecvt_utf8_utf16<wchar_t>> converter;
     wstring path_wide = converter.from_bytes("data\\" + to_string(static_cast<int>(round(Dt * dt_out))) + ".bin");
 
-    // Открытие файла в бинарном режиме
     ofstream fout(path_wide, ios::binary);
     if (!fout) {
         cerr << "Error opening the file!" << endl;
@@ -23,8 +21,6 @@ void saveParticlesToFile(double times, double Dt)
     fout.write(reinterpret_cast<const char*>(&times), sizeof(times));
     int np_count = particles.size();
     fout.write(reinterpret_cast<const char*>(&np_count), sizeof(np_count));
-
-    // Запись данных частиц
     for (const auto& particle : particles)
     {
         fout.write(reinterpret_cast<const char*>(&particle.x), sizeof(particle.x));

@@ -25,28 +25,23 @@ public:
     std::vector<size_t> getNeighbors(size_t particleIndex, const std::vector<Particle>& particles, double searchRadius) {
         std::vector<size_t> neighbors;
         const Particle& p = particles[particleIndex];
-        // Вычисляем координаты ячейки для текущей частицы
         int cellX = static_cast<int>(std::floor((p.x - minX) / cellSize));
         int cellY = static_cast<int>(std::floor((p.y - minY) / cellSize));
 
-        // Определяем границы поиска: текущая ячейка ±1
         int minCellX = max(0, cellX - 1);
         int maxCellX = min(numCellsX - 1, cellX + 1);
         int minCellY = max(0, cellY - 1);
         int maxCellY = min(numCellsY - 1, cellY + 1);
 
-        // Проходим по всем соседним ячейкам (включая текущую)
         for (int cy = minCellY; cy <= maxCellY; ++cy) {
             for (int cx = minCellX; cx <= maxCellX; ++cx) {
                 int cellIndex = cy * numCellsX + cx;
-                // Проверяем все частицы в текущей ячейке
                 for (size_t idx : cells[cellIndex]) {
-                    if (idx != particleIndex) { // Исключаем саму частицу
+                    if (idx != particleIndex) {
                         const Particle& q = particles[idx];
                         double dx = p.x - q.x;
                         double dy = p.y - q.y;
                         double distanceSquared = dx * dx + dy * dy;
-                        // Добавляем только те частицы, что находятся в пределах searchRadius
                         if (distanceSquared < searchRadius * searchRadius) {
                             neighbors.push_back(idx);
                         }
@@ -55,20 +50,6 @@ public:
             }
         }
         return neighbors;
-    }
-
-    void printCells() const {
-        std::cout << "CELLS CONTENT:\n";
-        for (int y = 0; y < numCellsY; ++y) {
-            for (int x = 0; x < numCellsX; ++x) {
-                int cellIndex = y * numCellsX + x;
-                if (!cells[cellIndex].empty()) {
-                    std::cout << "Cell (" << x << ", " << y << ") [cellCount " << cells[cellIndex].size() << "]: ";
-                    std::cout << "\n";
-                }
-            }
-        }
-        std::cout << "END CELL CONTENT.\n";
     }
 
 private:

@@ -65,23 +65,18 @@ void SPH() {
     tau = 1e-3;
 
     while (t <= t_end) {
-        // Шаг 1: Вычисляем силы для текущего состояния
-        ComputeForces(particles);  // Вычисляет Fu_p, Fv_p, Fe_p, Rhot, ht_p
+        ComputeForces(particles);
 
-        // Сохраняем текущие силы
         Fu_p_old = Fu_p;
         Fv_p_old = Fv_p;
         Fe_p_old = Fe_p;
 
-        // Вычисляем гравитационные силы гало
         computeForcesGravCool(particles, force_halo_x, force_halo_y);
 
-        // Шаг 2: Предиктор (t + dt/2)
         double dt05 = 0.5 * tau;
         for (int i = 0; i < numParticles; ++i) {
             predictedParticles[i] = particles[i];
 
-            // Полярные координаты (предиктор)
             double xi = predictedParticles[i].x;
             double yi = predictedParticles[i].y;
             double ri = sqrt(xi * xi + yi * yi);
@@ -91,13 +86,11 @@ void SPH() {
             double Vy = predictedParticles[i].velocityY;
             double Vfi = Vy * cxy - Vx * sxy;
 
-            // Силы
             double Fx = force_halo_x[i] + Fu_p_old[i];
             double Fy = force_halo_y[i] + Fv_p_old[i];
             double Fr = Fx * cxy + Fy * sxy + Vfi * Vfi / ri;
             double Ffi = (Fy * cxy - Fx * sxy) * ri;
 
-            // Корректор (текущее состояние)
             xi = particles[i].x;
             yi = particles[i].y;
             ri = sqrt(xi* xi + yi * yi);
@@ -110,7 +103,6 @@ void SPH() {
             Vfi = Vy * cxy - Vx * sxy;
             double Lrv = ri * Vfi;
 
-            // Предиктор на t + dt/2
             double Vr_t = Vr + dt05 * Fr;
             double ri_t = ri + dt05 * (Vr_t + Vr);
             double Lrv_t = Lrv + dt05 * Ffi;
@@ -119,7 +111,6 @@ void SPH() {
             double cfi = cos(fi_t);
             double sfi = sin(fi_t);
 
-            // Обновляем предсказанные значения
             predictedParticles[i].x = ri_t * cfi;
             predictedParticles[i].y = ri_t * sfi;
             predictedParticles[i].velocityX = Vr_t * cfi - Vfi_t * sfi;
@@ -129,14 +120,11 @@ void SPH() {
             predictedParticles[i].pressure = (gamma - 1.0) * predictedParticles[i].energy * Rhot[i];
         }
 
-        // Шаг 3: Вычисляем силы для предсказанного состояния (t + dt/2)
-        ComputeForces(predictedParticles);  // Обновляет Fu_p, Fv_p, Fe_p, Rhot, ht_p
+        ComputeForces(predictedParticles);
         computeForcesGravCool(predictedParticles, force_halo_x, force_halo_y);
 
-        // Шаг 4: Корректор (t + dt) и вычисление временного шага
 
         for (int i = 0; i < numParticles; ++i) {
-            // Полярные координаты (предиктор)
             double xi = predictedParticles[i].x;
             double yi = predictedParticles[i].y;
             double ri = sqrt(xi * xi + yi * yi);
@@ -146,13 +134,11 @@ void SPH() {
             double Vy = predictedParticles[i].velocityY;
             double Vfi = Vy * cxy - Vx * sxy;
 
-            // Силы
             double Fx = force_halo_x[i] + Fu_p[i];
             double Fy = force_halo_y[i] + Fv_p[i];
             double Fr = Fx * cxy + Fy * sxy + Vfi * Vfi / ri;
             double Ffi = (Fy * cxy - Fx * sxy) * ri;
 
-            // Корректор (текущее состояние)
             xi = particles[i].x;
             yi = particles[i].y;
             ri = sqrt(xi * xi + yi * yi);
@@ -165,7 +151,6 @@ void SPH() {
             Vfi = Vy * cxy - Vx * sxy;
             double Lrv = ri * Vfi;
 
-            // Корректор на t + dt
             double Vr_tt = Vr + dt05 * Fr;
             double ri_tt = ri + dt05 * Vr_tt;
             double Vr_t = 2.0 * Vr_tt - Vr;
@@ -177,7 +162,6 @@ void SPH() {
             double cfi = cos(fi_t);
             double sfi = sin(fi_t);
 
-            // Обновляем значения
             particles[i].x = ri_t * cfi;
             particles[i].y = ri_t * sfi;
             particles[i].velocityX = Vr_t * cfi - Vfi_t * sfi;
@@ -186,7 +170,6 @@ void SPH() {
             particles[i].distanceFromCenter = sqrt(particles[i].x * particles[i].x + particles[i].y * particles[i].y);
             particles[i].pressure = (gamma - 1.0) * particles[i].energy * Rhot[i];
 
-            // Обновление временного шага (как в Fortran)
             double hpi = ht_p[i];
             double ax = sqrt(hpi / abs(Fx));
             double ay = sqrt(hpi / abs(Fy));
@@ -196,7 +179,6 @@ void SPH() {
         double min = min(dtn, dt_x);
         tau = courant * min(min, dt_y);
 
-        // Шаг 5: Обновление времени и вывод
         t += tau;
         cout << "Time: " << t << " | dt: " << tau << endl;
 

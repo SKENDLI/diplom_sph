@@ -39,7 +39,7 @@ void computeForcesGravCool(vector<Particle>& particles, vector<double>& force_ha
 double computeRho(double Lf, double rr)
 {
     double cosh_val = cosh(rr / Lf);
-    return 1.0 / (cosh_val);
+    return 1.0 / (cosh_val * cosh_val);
 }
 
 double dComputeRho(double distance, double scale_radius)
@@ -68,8 +68,8 @@ double mass_difference(double rr, double rrk, double rrk_1, double target_mass, 
 
 double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2) {
     double rr = rrk + (rrk - rrk_1); // Начальное приближение
-    double drr = 1e-5;                // Шаг для численной производной
-    double tolerance = 1e-6;          // Точность
+    double drr = 1e-6;                // Шаг для численной производной
+    double tolerance = 1e-7;          // Точность
     int max_iter = 100;               // Максимум итераций
     for (int iter = 0; iter < max_iter; ++iter) {
         double ff_rr = mass_difference(rr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
@@ -118,14 +118,12 @@ void ComputeForces(vector<Particle>& particles) {
         }
     }
 
-    // Выделяем память под box
     for (int x = 0; x < Ngx; ++x) {
         for (int y = 0; y < Ngy; ++y) {
             box[x][y].resize(Np_box_max, 0);
         }
     }
 
-    // Второй проход: распределяем частицы по ячейкам
     Nbox.assign(Ngx, vector<int>(Ngy, 0));
     for (size_t i = 0; i < Np; ++i) {
         int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
@@ -139,7 +137,6 @@ void ComputeForces(vector<Particle>& particles) {
     }
 
 
-    // Вычисление плотности (Rhot)
     for (size_t i = 0; i < Np; ++i) {
         int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
         int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
