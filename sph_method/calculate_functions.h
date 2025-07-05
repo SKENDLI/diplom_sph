@@ -67,14 +67,14 @@ double mass_difference(double rr, double rrk, double rrk_1, double target_mass, 
 }
 
 double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2) {
-    double rr = rrk + (rrk - rrk_1); // Начальное приближение
-    double drr = 1e-6;                // Шаг для численной производной
-    double tolerance = 1e-7;          // Точность
-    int max_iter = 100;               // Максимум итераций
+    double rr = rrk + (rrk - rrk_1);
+    double drr = 1e-6;
+    double tolerance = 1e-7;
+    int max_iter = 100;
     for (int iter = 0; iter < max_iter; ++iter) {
         double ff_rr = mass_difference(rr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
         double ff_rr1 = mass_difference(rr + drr, rrk, rrk_1, target_mass, B_rho, m_p, Lf, pi2);
-        double dff = drr * ff_rr / (ff_rr1 - ff_rr); // Защита от деления на 0
+        double dff = drr * ff_rr / (ff_rr1 - ff_rr);
         rr -= dff;
         if (abs(ff_rr) < tolerance && abs(dff) < tolerance) {
             break;
@@ -93,7 +93,6 @@ void ComputeForces(vector<Particle>& particles) {
     Rhot.assign(Np, 0.0);
     neighborCount.assign(Np, 0);
 
-    // Обновление hp_min
     double hp_min = hp_max;
     for (size_t i = 0; i < Np; ++i) {
         if (ht_p[i] < hp_min) hp_min = ht_p[i];
@@ -101,13 +100,11 @@ void ComputeForces(vector<Particle>& particles) {
     h = hp_min;
     h2 = 2.0 * h;
 
-    // Сортировка частиц по ячейкам
     vector<vector<vector<int>>> box(Ngx, vector<vector<int>>(Ngy));
     vector<vector<int>> Nbox(Ngx, vector<int>(Ngy, 0));
     vector<vector<double>> hmaxbox(Ngx, vector<double>(Ngy, 0.0));
     int Np_box_max = 0;
 
-    // Первый проход: определяем максимальное количество частиц в ячейке
     for (size_t i = 0; i < Np; ++i) {
         int xbox = static_cast<int>((particles[i].x - x_in) / h2 + 1.0);
         int ybox = static_cast<int>((particles[i].y - y_in) / h2 + 1.0);
@@ -178,7 +175,6 @@ void ComputeForces(vector<Particle>& particles) {
         if (ht_p[i] > hp_max) ht_p[i] = hp_max;
     }
 
-    // Вычисление сил и временного шага
     double dt_1 = 1.0;
     double gamma1 = gamma - 1.0;
 
@@ -249,7 +245,6 @@ void ComputeForces(vector<Particle>& particles) {
                 }
             }
 
-            // Временной шаг
             double ci = sqrt(gamma * Ppi / Rhoi);
             double a1 = hpi / (ci * (1.0 + 1.2 * alpha) + 1.2 * beta * maximum);
             if (dt_1 > a1) dt_1 = a1;

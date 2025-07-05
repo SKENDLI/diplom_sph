@@ -11,14 +11,14 @@ int main()
         particles.resize(numParticles);
         predictedParticles.resize(numParticles);
         neighborCount.resize(numParticles);
-        Rho.resize(numParticles);            // Начальная плотность
-        Rhot.resize(numParticles);           // Вычисляемая плотность
-        Fu_p.resize(numParticles);           // Сила по X
-        Fv_p.resize(numParticles);           // Сила по Y
-        Fe_p.resize(numParticles);           // Изменение энергии
-        ht_p.resize(numParticles);           // Обновляемая сглаживающая длина
-        force_halo_x.resize(numParticles);   // Сила от гало по X
-        force_halo_y.resize(numParticles);   // Сила от гало по Y
+        Rho.resize(numParticles);
+        Rhot.resize(numParticles);
+        Fu_p.resize(numParticles);
+        Fv_p.resize(numParticles);
+        Fe_p.resize(numParticles);
+        ht_p.resize(numParticles);
+        force_halo_x.resize(numParticles);
+        force_halo_y.resize(numParticles);
     }
 
     string path = "";
@@ -181,8 +181,6 @@ void SPH() {
 
         t += tau;
         cout << "Time: " << t << " | dt: " << tau << endl;
-
-        save_laws_cons(t, next_print_time, initial_energy, particles);
 
         if (t >= Dt) {
             if (check_print == 0) {

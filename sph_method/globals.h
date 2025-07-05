@@ -106,10 +106,5 @@ double gradW(double s, double rij, double hij);
 double mu(double s, double urdot, double hij);
 double find_radius(double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
 double mass_difference(double rr, double rrk, double rrk_1, double target_mass, double B_rho, double m_p, double Lf, double pi2);
-template <typename T>
-void logVariable(const T& var);
-template <typename T>
-void logVariable(const std::vector<T>& vec);
 void computeForcesGravCool(std::vector<Particle>& particles, std::vector<double>& force_halo_x, std::vector<double>& force_halo_y);
 void law_cons(double& Energy, const std::vector<Particle>& parts);
-void save_laws_cons(double t, double& next_print_time, double initial_energy, vector<Particle>& particles);
